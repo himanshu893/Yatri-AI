@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Yatri AI - Your Digital Curator</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error-container": "#ffdad6",
+                    "secondary-fixed": "#e1e0ff",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-container": "#fffbff",
+                    "inverse-primary": "#b8c3ff",
+                    "on-primary-container": "#fffbff",
+                    "surface-bright": "#f7f9fb",
+                    "on-secondary": "#ffffff",
+                    "inverse-on-surface": "#eff1f3",
+                    "surface-container-low": "#f2f4f6",
+                    "surface-dim": "#d8dadc",
+                    "on-background": "#191c1e",
+                    "outline-variant": "#c1c6d7",
+                    "on-error": "#ffffff",
+                    "on-surface": "#191c1e",
+                    "primary-container": "#3e65ff",
+                    "surface-variant": "#e0e3e5",
+                    "primary": "#0a47ee",
+                    "tertiary-fixed": "#dfe2ee",
+                    "on-primary-fixed": "#001356",
+                    "on-primary-fixed-variant": "#0035be",
+                    "secondary-container": "#6063ee",
+                    "tertiary-container": "#71747f",
+                    "surface-container-high": "#e6e8ea",
+                    "secondary-fixed-dim": "#c0c1ff",
+                    "outline": "#717786",
+                    "on-error-container": "#93000a",
+                    "primary-fixed": "#dde1ff",
+                    "on-tertiary-container": "#fefcff",
+                    "on-tertiary-fixed": "#171c24",
+                    "background": "#f7f9fb",
+                    "on-primary": "#ffffff",
+                    "tertiary": "#585c66",
+                    "on-secondary-fixed-variant": "#2f2ebe",
+                    "on-secondary-fixed": "#07006c",
+                    "on-tertiary": "#ffffff",
+                    "on-surface-variant": "#414754",
+                    "on-tertiary-fixed-variant": "#434750",
+                    "secondary": "#4648d4",
+                    "error": "#ba1a1a",
+                    "surface-container": "#eceef0",
+                    "surface": "#f7f9fb",
+                    "inverse-surface": "#2d3133",
+                    "surface-tint": "#124af0",
+                    "surface-container-highest": "#e0e3e5",
+                    "primary-fixed-dim": "#b8c3ff",
+                    "tertiary-fixed-dim": "#c3c6d2"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Plus Jakarta Sans"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+</head>
+<body class="bg-surface font-body text-on-surface selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TopNavBar -->
+<nav class="sticky top-0 w-full z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl no-border transition-colors duration-300 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)]">
+<div class="flex justify-between items-center px-6 py-4 max-w-7xl mx-auto">
+<div class="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent font-headline tracking-tight">Yatri AI</div>
+<div class="hidden md:flex items-center gap-8 font-headline font-medium text-sm tracking-tight">
+<a class="text-blue-600 dark:text-blue-400 font-bold border-b-2 border-blue-600 px-1 py-1" href="#">Home</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-blue-500 px-1 py-1 transition-all duration-200" href="#">My Trips</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="hidden md:block font-headline font-medium text-sm text-slate-600 hover:text-blue-600 transition-colors">Login</button>
+<span class="material-symbols-outlined text-slate-600 cursor-pointer scale-105 active:scale-95 transition-transform" data-icon="account_circle">account_circle</span>
+</div>
+</div>
+</nav>
+<!-- Hero Section -->
+<section class="relative min-h-[921px] flex items-center justify-center overflow-hidden px-6">
+<div class="absolute inset-0 z-0">
+<img alt="Travel Destination" class="w-full h-full object-cover" data-alt="Stunning aerial view of the turquoise waters and white sandy beaches of the Maldives under a bright midday sun" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCuhbOh8E6GLRpKxl4gZlmxzewqxjKaQNepMEiSW6Pyf11blshvGHNsTXbn1kyA-MlVvzCCZIvVZpoS3cNxn9fYYOzF2NhyK63zISWENdkXeMTC7OhtjTqKhwgAzXhWL-R6ExgJcjD1rMw1lLWDOlijdkghqqnVSaT92iPQmLDTULrx6lRfqoBDdyR7g2ksjbUXF_TEAbMtoWU52aKdK4IHywu_MlXQJK39mSTM-wtozWmrGFdCVSNUq_ECsMz2ITyZMCADa3W2TQto"/>
+<div class="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-surface"></div>
+</div>
+<div class="relative z-10 max-w-5xl w-full">
+<div class="text-center mb-12">
+<h1 class="font-headline text-5xl md:text-7xl font-extrabold text-white mb-6 tracking-tight drop-shadow-lg">
+                    Your Personal <br/><span class="text-white/90">Digital Curator.</span>
+</h1>
+<p class="text-white/90 text-lg md:text-xl max-w-2xl mx-auto font-medium drop-shadow-md">
+                    Experience travel tailored by AI. Discover hidden gems and curated itineraries designed for your unique journey.
+                </p>
+</div>
+<!-- Glassmorphic Search Card -->
+<div class="glass-panel p-8 md:p-10 rounded-xl shadow-2xl max-w-4xl mx-auto">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-widest text-on-surface-variant px-1">Destination</label>
+<div class="relative">
+<input class="w-full bg-surface-container-highest border-0 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all" placeholder="Where to?" type="text"/>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-widest text-on-surface-variant px-1">Budget</label>
+<select class="w-full bg-surface-container-highest border-0 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all">
+<option>Economy</option>
+<option>Mid-Range</option>
+<option>Luxury</option>
+</select>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-widest text-on-surface-variant px-1">Duration</label>
+<input class="w-full bg-surface-container-highest border-0 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all" placeholder="Days" type="text"/>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold uppercase tracking-widest text-on-surface-variant px-1">Travel Type</label>
+<select class="w-full bg-surface-container-highest border-0 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary focus:bg-surface-container-lowest transition-all">
+<option>Solo</option>
+<option>Couple</option>
+<option>Family</option>
+<option>Friends</option>
+</select>
+</div>
+</div>
+<div class="mt-8">
+<button class="w-full bg-gradient-to-r from-primary to-secondary text-white font-headline font-bold py-4 rounded-full shadow-lg hover:shadow-primary/30 transition-all duration-300 transform hover:scale-[1.01] active:scale-[0.98]">
+                        Generate AI Trip
+                    </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Popular Destinations - Bento Grid -->
+<section class="max-w-7xl mx-auto px-6 py-24 bg-surface">
+<div class="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
+<div class="max-w-xl">
+<h2 class="font-headline text-3xl md:text-4xl font-extrabold tracking-tight mb-4">Trending Collections</h2>
+<p class="text-on-surface-variant leading-relaxed">Hand-picked by our AI based on global wanderlust trends and hidden gem discoveries.</p>
+</div>
+<button class="text-primary font-bold flex items-center gap-2 group">
+                View all destinations 
+                <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 h-full md:h-[600px]">
+<div class="md:col-span-2 md:row-span-2 group relative overflow-hidden rounded-lg bg-surface-container-lowest shadow-sm hover:shadow-xl transition-all duration-300">
+<img alt="Paris" class="absolute inset-0 w-full h-full object-cover p-2 rounded-lg transition-transform duration-700 group-hover:scale-110" data-alt="Eiffel Tower standing tall against a dreamy pastel pink and purple sunset sky in Paris" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrRMudvRSCXARdWxEwC6y39KBfgZpDiQvVqe0vRM5SIsrY_9Pqy0NBsNNAC1xA7FZkIKOUdkAkBXN76KzwLdHFqrbU7sO9WXQVOEmNo4YXgQt7kFP0js8HzcmaNXNLod3UMtQbffUByIJz46bbp_04KEpFf-cZblVenFaWxDWaOMZJs3pOQ92lGuMmIJRBxFCJEVq5EtL3D60KUCdpixPLdOgL6R5K5C8o_6saKXqL_6zRvpM5mZpnrJdUdOAg0tbl9Xl6Y0DFfYbR"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+<div class="absolute bottom-6 left-6 text-white translate-y-4 group-hover:translate-y-0 transition-transform">
+<h3 class="font-headline text-2xl font-bold">Paris, France</h3>
+<p class="text-white/80 text-sm">Romantic getaways and art</p>
+</div>
+</div>
+<div class="md:col-span-2 group relative overflow-hidden rounded-lg bg-surface-container-lowest shadow-sm hover:shadow-xl transition-all duration-300">
+<img alt="Kyoto" class="absolute inset-0 w-full h-full object-cover p-2 rounded-lg transition-transform duration-700 group-hover:scale-110" data-alt="Golden Kinkaku-ji temple in Kyoto reflecting in a calm pond surrounded by lush green maples" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDxB1UumAki97KhVrxxhJPOOb3hDRLa7MjHqvPeiljwb_Y4T9J0M17-csxob7INXb6eP0xd6CjaQQmdN8vrE41HojKp8GCS9NM3qEofLf5sO7KiOctzKSDOi9xzFUh50tLOIbXd79RQnUvGFhOrvtHj_uEt_okGqK6_H4_cI1HyKOXjJ-IKCAWOW8wJVv6ouuJA76fv9xWXG_t5SuinXyL-fuLfXfcwpIlRUveD1utSQcRW9VazLk107OTmKcFjtj6iLhHkJLDaVkII"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-6 left-6 text-white">
+<h3 class="font-headline text-xl font-bold">Kyoto, Japan</h3>
+<p class="text-white/80 text-sm">Ancient traditions &amp; tea houses</p>
+</div>
+</div>
+<div class="group relative overflow-hidden rounded-lg bg-surface-container-lowest shadow-sm hover:shadow-xl transition-all duration-300">
+<img alt="Petra" class="absolute inset-0 w-full h-full object-cover p-2 rounded-lg transition-transform duration-700 group-hover:scale-110" data-alt="The Treasury building in Petra carved into red sandstone cliffs with dramatic light beams" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCoZrrvDpN7O2otOVnW9OP2Z_9pFQ9XKt4LB3ciJtBebtjKkFo_dd3jatM1vduEFbcs9mJGLwC8qI87PFvinpjW6OH44ZAarQNzjcjuxDigAZbj6a6tEkFtkPC-wLcMA7JDhsgoMjaVtPig3QQRbBGpwoV5ML7AyzyXBDeuZP9VPA-IZ4vMzefx30UpyTAwIz1sa4iAj-GaBshTHcBTlwuxeSgqyYST0gU5D9JDwJtITo8mjOt422P0H3BiCMbi1doUyZp7f4kDqp0S"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-4 left-4 text-white">
+<h4 class="font-headline font-bold">Petra</h4>
+</div>
+</div>
+<div class="group relative overflow-hidden rounded-lg bg-surface-container-lowest shadow-sm hover:shadow-xl transition-all duration-300">
+<img alt="Venice" class="absolute inset-0 w-full h-full object-cover p-2 rounded-lg transition-transform duration-700 group-hover:scale-110" data-alt="Gondolas floating on the Grand Canal in Venice at sunset with historic buildings lining the banks" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQzYTlZY7BaPQxO8FtIXOMXLdMi8Jn1Y848aHnESv-rnv1utTJfo4s5IO_nhNm8kVZvrEd46wyI7kMfyNY-8sMY1l9IJyXh4jdkF_mDoaKFmUNCNQ1H0yySFIEn5p_phNfnZ4qkW1t4y6fGAqzRr0giMr4Hx3b_7k4fb7c4q-OOXcs1HWQv9WyP7OigqePU4OFM8h1DYKO7E3pTrhJnYpQGZkpbXMOyhSJx5PNeBTuCrCRzGqJrFm56eH563XxuwAr893CXFMAyNBz"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
+<div class="absolute bottom-4 left-4 text-white">
+<h4 class="font-headline font-bold">Venice</h4>
+</div>
+</div>
+</div>
+</section>
+<!-- Features Section -->
+<section class="py-24 bg-surface-container-low">
+<div class="max-w-7xl mx-auto px-6">
+<div class="text-center max-w-2xl mx-auto mb-20">
+<h2 class="font-headline text-3xl md:text-4xl font-extrabold tracking-tight mb-4">Beyond the Map</h2>
+<p class="text-on-surface-variant">Our AI doesn't just find locations; it curates experiences based on thousands of data points.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+<div class="flex flex-col items-center text-center p-8 bg-surface-container-lowest rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-white/40">
+<div class="w-16 h-16 bg-primary-fixed rounded-full flex items-center justify-center text-primary mb-6">
+<span class="material-symbols-outlined text-3xl" data-icon="auto_awesome">auto_awesome</span>
+</div>
+<h3 class="font-headline text-xl font-bold mb-4">AI Itineraries</h3>
+<p class="text-on-surface-variant leading-relaxed text-sm">Dynamic planning that adjusts to your pace, weather, and live events happening during your trip.</p>
+</div>
+<div class="flex flex-col items-center text-center p-8 bg-surface-container-lowest rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-white/40">
+<div class="w-16 h-16 bg-secondary-fixed rounded-full flex items-center justify-center text-secondary mb-6">
+<span class="material-symbols-outlined text-3xl" data-icon="bed">bed</span>
+</div>
+<h3 class="font-headline text-xl font-bold mb-4">Vetted Stays</h3>
+<p class="text-on-surface-variant leading-relaxed text-sm">Not just any hotel. We find spaces that match your aesthetic, from brutalist lofts to cozy chateaus.</p>
+</div>
+<div class="flex flex-col items-center text-center p-8 bg-surface-container-lowest rounded-lg shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-white/40">
+<div class="w-16 h-16 bg-tertiary-fixed rounded-full flex items-center justify-center text-tertiary mb-6">
+<span class="material-symbols-outlined text-3xl" data-icon="explore">explore</span>
+</div>
+<h3 class="font-headline text-xl font-bold mb-4">Smart Navigation</h3>
+<p class="text-on-surface-variant leading-relaxed text-sm">Real-time AR-ready maps that guide you through local shortcuts and public transit with ease.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Testimonials Section -->
+<section class="py-24 px-6 max-w-7xl mx-auto overflow-hidden">
+<div class="flex flex-col md:flex-row gap-16 items-center">
+<div class="w-full md:w-1/3">
+<h2 class="font-headline text-4xl font-extrabold tracking-tighter mb-6 leading-tight">Trusted by Global Explorers.</h2>
+<div class="flex items-center gap-2 mb-4">
+<div class="flex -space-x-3">
+<img alt="User 1" class="w-10 h-10 rounded-full border-2 border-surface" data-alt="Portrait of a young professional woman smiling warmly" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBbRLTbba2x4jBlDXeZpsnwOkYvec3dHgYi5a01DlieG_YwA0BeSEm0oaWoA2aQKmt54R2Z1OeDwDPN2cnW9_4EFZnqtue-e2eTOzL20dFQH_KtRuQs3uODY0o6ssRoUeFYG3psO7DggLcne0asCzCi8IFWA2MMPy81LDw4mjryfLJWvc4VilMMq7b0g469OqV8LSlTdSJES3CWqX1bHHrostg7vrOkGtwS8zYKLMH91tGA6uRMRoJRtzb0ZTiITS7JIkIKGzgsLV3E"/>
+<img alt="User 2" class="w-10 h-10 rounded-full border-2 border-surface" data-alt="Close up portrait of a middle aged man with a friendly expression" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCDGAsF-J3bwCy1lQMf36RRkLoq2w3BjuWGVcCInauZSvlKm57QIz99xm7Yfxwtn0HMECGq5J5qpsE3frqsmONVj5Dam8buLDkjUg4LKP3RZtccVeLMcTNFjV-ZzrjA8XeA-K1QOe95bl8z4hd-xQRAwER0pIYnE6Wyekxkm_dxdswGkFCS8CgQNKQZLVZY1nH8oBHHrj-cqgmhPW9F_-sYvDzI39TO9Obwv5T1B3cfHA-tz2fpNmOVyxvD4RWD5T13KbRMFCkCEv7m"/>
+<img alt="User 3" class="w-10 h-10 rounded-full border-2 border-surface" data-alt="Artistic portrait of a woman with curly hair looking thoughtfully into the distance" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBUPWYe5htihplb22fcZI1-jdurVa3uog6SHBQZhzxmA2DpGbv1xmwa5f9Ul6cA2hBVTjbpPZ2q3RS40fcCQfqDf-bU6VTnpTivkkvb68yI87jOTTmmpsTgKVEyIRAqFB0L3pEiWM1x4ZsnlJGS2L9iYR7cemosllCF5BfXz_X_WHYOvK_qkz1QTMbMlJGVQdHJTTVXOabves8aM4h474PbEqqqIq3LVXO2meoYwVwWXt4u03_eYNJF6PkrkauTsY50AxRK9Jqi-i7Z"/>
+</div>
+<span class="text-sm font-bold">+12k Travelers</span>
+</div>
+</div>
+<div class="w-full md:w-2/3 grid grid-cols-1 md:grid-cols-2 gap-8">
+<div class="bg-surface-container p-8 rounded-lg relative">
+<span class="material-symbols-outlined text-primary/20 text-6xl absolute top-4 right-4" data-icon="format_quote">format_quote</span>
+<p class="italic text-on-surface-variant mb-6 leading-relaxed">"The AI recommended a hidden izakaya in Tokyo that wasn't on any travel blog. It completely made my trip feel authentic and unique."</p>
+<div>
+<p class="font-bold">Elena R.</p>
+<p class="text-xs text-on-surface-variant">Adventure Blogger</p>
+</div>
+</div>
+<div class="bg-surface-container p-8 rounded-lg relative">
+<span class="material-symbols-outlined text-primary/20 text-6xl absolute top-4 right-4" data-icon="format_quote">format_quote</span>
+<p class="italic text-on-surface-variant mb-6 leading-relaxed">"Planning for a family of five is usually a nightmare. Yatri AI handled the logistics, spacing out our days perfectly so no one got tired."</p>
+<div>
+<p class="font-bold">Marcus Chen</p>
+<p class="text-xs text-on-surface-variant">Family Traveler</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Floating AI Button -->
+<button class="fixed bottom-8 right-8 w-16 h-16 bg-gradient-to-br from-primary to-secondary text-white rounded-full shadow-2xl flex items-center justify-center z-50 group hover:scale-110 transition-transform active:scale-95">
+<span class="material-symbols-outlined text-3xl" data-icon="smart_toy" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+<div class="absolute right-20 bg-white text-primary font-bold px-4 py-2 rounded-lg text-sm shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+            Ask Yatri AI
+        </div>
+</button>
+<!-- Footer -->
+<footer class="w-full py-12 px-6 mt-auto bg-slate-50 dark:bg-slate-950">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-7xl mx-auto">
+<div>
+<div class="text-lg font-bold text-slate-900 dark:text-slate-100 mb-4 font-headline">Yatri AI</div>
+<p class="font-['Inter'] text-sm text-slate-500 max-w-xs leading-relaxed">
+                    © 2024 Yatri AI. Your Digital Curator. Crafting meaningful journeys through the power of artificial intelligence.
+                </p>
+</div>
+<div class="flex flex-wrap gap-8 justify-start md:justify-end">
+<div class="flex flex-col gap-3">
+<span class="text-xs font-bold uppercase tracking-widest text-slate-400">Company</span>
+<a class="text-slate-500 hover:text-blue-500 transition-colors hover:underline text-sm font-['Inter']" href="#">Testimonials</a>
+<a class="text-slate-500 hover:text-blue-500 transition-colors hover:underline text-sm font-['Inter']" href="#">Support</a>
+</div>
+<div class="flex flex-col gap-3">
+<span class="text-xs font-bold uppercase tracking-widest text-slate-400">Legal</span>
+<a class="text-slate-500 hover:text-blue-500 transition-colors hover:underline text-sm font-['Inter']" href="#">Privacy Policy</a>
+<a class="text-slate-500 hover:text-blue-500 transition-colors hover:underline text-sm font-['Inter']" href="#">Terms of Service</a>
+</div>
+</div>
+</div>
+</footer>
+</body></html>

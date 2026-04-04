@@ -1,11 +1,13 @@
 import os
 import re
 import json
+from pathlib import Path
 from groq import Groq
 from dotenv import load_dotenv
 from agent.state import AgentState
 from agent.tools import (
     get_weather_data,
+    get_weather_data_at_coords,
     get_hotel_prices_serpapi,
     get_hotel_prices_tavily,
     get_current_situation,
@@ -26,8 +28,9 @@ def reset_groq_counter():
     global _groq_call_count
     _groq_call_count = 0
 
-# ── Load System Prompt ────────────────────────────────────
-with open("prompts/system_prompt.txt", "r", encoding="utf-8") as f:
+# ── Load System Prompt (path works from any cwd) ──────────
+_PROMPT_FILE = Path(__file__).resolve().parent.parent / "prompts" / "system_prompt.txt"
+with open(_PROMPT_FILE, "r", encoding="utf-8") as f:
     system_prompt = f.read()
 
 # ── Helper — LLM call ─────────────────────────────────────
@@ -136,8 +139,12 @@ def research_node(state: AgentState) -> AgentState:
     nights      = state.get("nights", 3)
     num_people  = state.get("num_people", 2)
 
-    # 1. Weather — Open-Meteo (free, no key, no Tavily)
-    state["weather_data"] = get_weather_data(destination)
+    # 1. Weather — use exact coords from UI if provided; else geocode name
+    lat, lng = state.get("destination_lat"), state.get("destination_lng")
+    if lat is not None and lng is not None:
+        state["weather_data"] = get_weather_data_at_coords(float(lat), float(lng))
+    else:
+        state["weather_data"] = get_weather_data(destination)
 
     # 2. Hotel price trends — SerpAPI Google Hotels (real prices!)
     serpapi_hotels = get_hotel_prices_serpapi(destination, month, nights, num_people)

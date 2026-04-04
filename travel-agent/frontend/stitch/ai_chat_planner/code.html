@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Yatri AI | Chat Planner</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error-container": "#ffdad6",
+                        "secondary-fixed": "#e1e0ff",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#fffbff",
+                        "inverse-primary": "#b8c3ff",
+                        "on-primary-container": "#fffbff",
+                        "surface-bright": "#f7f9fb",
+                        "on-secondary": "#ffffff",
+                        "inverse-on-surface": "#eff1f3",
+                        "surface-container-low": "#f2f4f6",
+                        "surface-dim": "#d8dadc",
+                        "on-background": "#191c1e",
+                        "outline-variant": "#c1c6d7",
+                        "on-error": "#ffffff",
+                        "on-surface": "#191c1e",
+                        "primary-container": "#3e65ff",
+                        "surface-variant": "#e0e3e5",
+                        "primary": "#0a47ee",
+                        "tertiary-fixed": "#dfe2ee",
+                        "on-primary-fixed": "#001356",
+                        "on-primary-fixed-variant": "#0035be",
+                        "secondary-container": "#6063ee",
+                        "tertiary-container": "#71747f",
+                        "surface-container-high": "#e6e8ea",
+                        "secondary-fixed-dim": "#c0c1ff",
+                        "outline": "#717786",
+                        "on-error-container": "#93000a",
+                        "primary-fixed": "#dde1ff",
+                        "on-tertiary-container": "#fefcff",
+                        "on-tertiary-fixed": "#171c24",
+                        "background": "#f7f9fb",
+                        "on-primary": "#ffffff",
+                        "tertiary": "#585c66",
+                        "on-secondary-fixed-variant": "#2f2ebe",
+                        "on-secondary-fixed": "#07006c",
+                        "on-tertiary": "#ffffff",
+                        "on-surface-variant": "#414754",
+                        "on-tertiary-fixed-variant": "#434750",
+                        "secondary": "#4648d4",
+                        "error": "#ba1a1a",
+                        "surface-container": "#eceef0",
+                        "surface": "#f7f9fb",
+                        "inverse-surface": "#2d3133",
+                        "surface-tint": "#124af0",
+                        "surface-container-highest": "#e0e3e5",
+                        "primary-fixed-dim": "#b8c3ff",
+                        "tertiary-fixed-dim": "#c3c6d2"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "1rem",
+                        "lg": "2rem",
+                        "xl": "3rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Plus Jakarta Sans"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .shimmer {
+            background: linear-gradient(90deg, #f2f4f6 0%, #e6e8ea 50%, #f2f4f6 100%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body class="bg-surface font-body text-on-surface min-h-screen flex flex-col selection:bg-primary-fixed">
+<!-- Top Navigation Bar -->
+<nav class="sticky top-0 w-full z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] no-border transition-colors duration-300">
+<div class="flex justify-between items-center px-6 py-4 max-w-7xl mx-auto">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent font-headline tracking-tight">Yatri AI</span>
+<div class="hidden md:flex items-center gap-6">
+<a class="font-headline font-medium text-sm tracking-tight text-slate-600 dark:text-slate-400 hover:text-blue-500 hover:bg-blue-50/50 transition-all duration-200 px-3 py-1.5 rounded-full" href="#">Home</a>
+<a class="font-headline font-medium text-sm tracking-tight text-blue-600 dark:text-blue-400 font-bold border-b-2 border-blue-600 px-3 py-1.5 rounded-none" href="#">My Trips</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="scale-105 active:scale-95 transition-transform text-slate-600 material-symbols-outlined">account_circle</button>
+</div>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-grow flex flex-col md:flex-row max-w-[1600px] mx-auto w-full h-[calc(100vh-72px)] overflow-hidden bg-surface">
+<!-- Left Column: Conversational AI -->
+<section class="flex-1 flex flex-col bg-surface-container-low relative border-r border-outline-variant/15">
+<!-- Chat Header (Mobile Only Toggle or Status) -->
+<div class="px-6 py-4 bg-surface/40 backdrop-blur-sm border-b border-outline-variant/10 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+<span class="text-xs font-semibold text-on-surface-variant uppercase tracking-widest">Active Planning Session</span>
+</div>
+<span class="text-xs text-on-surface-variant font-medium">Model: Yatri-Curator-v2</span>
+</div>
+<!-- Messages Area -->
+<div class="flex-1 overflow-y-auto p-6 space-y-8">
+<!-- User Message -->
+<div class="flex justify-end items-end gap-3 max-w-[85%] ml-auto">
+<div class="bg-primary px-5 py-3.5 rounded-t-lg rounded-bl-lg shadow-sm">
+<p class="text-on-primary text-sm leading-relaxed">Plan my trip to Goa for 3 days under ₹10,000</p>
+</div>
+</div>
+<!-- AI Response Message -->
+<div class="flex justify-start items-start gap-4 max-w-[90%]">
+<div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center shrink-0 shadow-lg shadow-primary/10">
+<span class="material-symbols-outlined text-white text-lg" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<div class="space-y-4 w-full">
+<div class="bg-surface-container-lowest glass-panel p-6 rounded-lg border border-outline-variant/10 shadow-sm">
+<div class="flex items-center gap-2 mb-4">
+<span class="text-xs font-bold text-primary tracking-tighter uppercase">Digital Curator</span>
+<div class="flex gap-1">
+<div class="w-1 h-1 rounded-full bg-primary/40"></div>
+<div class="w-1 h-1 rounded-full bg-primary/40"></div>
+</div>
+</div>
+<!-- Typing/Loading Skeleton -->
+<div class="space-y-3">
+<div class="h-4 w-full shimmer rounded-full opacity-60"></div>
+<div class="h-4 w-[92%] shimmer rounded-full opacity-60"></div>
+<div class="h-4 w-[75%] shimmer rounded-full opacity-60"></div>
+<div class="h-32 w-full shimmer rounded-lg opacity-40 mt-6"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Input Area -->
+<div class="p-6 bg-surface-container-low">
+<div class="max-w-3xl mx-auto relative group">
+<div class="absolute -inset-1 bg-gradient-to-r from-primary/20 to-secondary/20 rounded-lg blur opacity-25 group-focus-within:opacity-100 transition duration-1000"></div>
+<div class="relative flex items-center bg-surface-container-lowest rounded-lg p-2 border border-outline-variant/30 shadow-xl shadow-primary/5">
+<button class="p-2 text-outline hover:text-primary transition-colors material-symbols-outlined">attach_file</button>
+<input class="flex-1 bg-transparent border-none focus:ring-0 text-sm font-body px-4 py-2" placeholder="Add more details or ask a question..." type="text" value=""/>
+<button class="bg-primary text-on-primary p-2.5 rounded-md flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-sm">send</span>
+</button>
+</div>
+<p class="text-[10px] text-center mt-3 text-on-surface-variant/60 font-medium">Yatri AI can make mistakes. Check important travel info.</p>
+</div>
+</div>
+</section>
+<!-- Right Column: Summary Preview -->
+<aside class="w-full md:w-[420px] lg:w-[480px] bg-surface p-6 lg:p-8 overflow-y-auto">
+<div class="space-y-8">
+<!-- Header -->
+<div class="flex flex-col gap-2">
+<h2 class="text-3xl font-headline font-extrabold tracking-tight text-on-surface">Trip Blueprint</h2>
+<p class="text-on-surface-variant text-sm font-body">Real-time summary of your Goa adventure.</p>
+</div>
+<!-- Glassmorphic Summary Card -->
+<div class="relative group">
+<div class="absolute -inset-0.5 bg-gradient-to-br from-primary/10 to-transparent rounded-lg blur opacity-50"></div>
+<div class="relative bg-white/40 backdrop-blur-xl border border-white/60 p-8 rounded-lg shadow-2xl shadow-slate-200/50">
+<div class="absolute top-6 right-6">
+<span class="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full uppercase tracking-tighter">Drafting</span>
+</div>
+<!-- Image Frame -->
+<div class="mb-8 p-1.5 bg-surface-container-high/30 rounded-lg overflow-hidden">
+<img alt="Destination Preview" class="w-full h-48 object-cover rounded-md" data-alt="Scenic aerial view of a winding road along the lush tropical palm-fringed coastline of Goa with turquoise ocean waves" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtrBMrBEtNQYKKn-LbkuJ7eYjIrOxYArB7eOT7Y6QHgvefQIjTPLf4THUQCPRTONI2sUq_UWRgnqgB5THblAoybyrMesPufIRXjXaVSHvVW5SaDBWnX3SqUlF30eyxTYn5AydQt6MyQrFwD8-lT_sL80k--M8-J5sl17qdyentq2vtXIq2I7M5bDnNJtRoD5nB_FUrDnOtMccStLTE0kH8P4sFB6vXVemmSqqFWzYSJzGEa5SGTSWP3MROs-HpW7J1tdVkdotaOhTs"/>
+</div>
+<div class="space-y-6">
+<div class="flex items-start gap-4">
+<div class="w-10 h-10 rounded-full bg-primary/5 flex items-center justify-center border border-primary/10">
+<span class="material-symbols-outlined text-primary text-lg">location_on</span>
+</div>
+<div>
+<span class="block text-[10px] font-bold text-outline-variant uppercase tracking-widest mb-1">Destination</span>
+<h3 class="text-xl font-headline font-bold text-on-surface">Goa, India</h3>
+</div>
+</div>
+<div class="flex items-start gap-4">
+<div class="w-10 h-10 rounded-full bg-secondary/5 flex items-center justify-center border border-secondary/10">
+<span class="material-symbols-outlined text-secondary text-lg">calendar_month</span>
+</div>
+<div>
+<span class="block text-[10px] font-bold text-outline-variant uppercase tracking-widest mb-1">Duration</span>
+<p class="text-lg font-headline font-semibold text-on-surface">3 Days, 2 Nights</p>
+</div>
+</div>
+<div class="flex items-start gap-4">
+<div class="w-10 h-10 rounded-full bg-on-background/5 flex items-center justify-center border border-on-background/10">
+<span class="material-symbols-outlined text-on-background text-lg">payments</span>
+</div>
+<div>
+<span class="block text-[10px] font-bold text-outline-variant uppercase tracking-widest mb-1">Target Budget</span>
+<p class="text-lg font-headline font-semibold text-on-surface">₹10,000 Total</p>
+</div>
+</div>
+</div>
+<!-- Budget Allocation Mini-Chart -->
+<div class="mt-10 pt-8 border-t border-outline-variant/15">
+<span class="block text-[10px] font-bold text-outline-variant uppercase tracking-widest mb-4">Estimated Allocation</span>
+<div class="flex h-3 w-full rounded-full overflow-hidden bg-surface-container-high/50">
+<div class="w-[45%] bg-primary" title="Stay"></div>
+<div class="w-[30%] bg-secondary" title="Food"></div>
+<div class="w-[25%] bg-outline" title="Transit"></div>
+</div>
+<div class="flex gap-4 mt-3">
+<div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-primary"></div><span class="text-[10px] font-medium text-on-surface-variant">Stay</span></div>
+<div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-secondary"></div><span class="text-[10px] font-medium text-on-surface-variant">Food</span></div>
+<div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full bg-outline"></div><span class="text-[10px] font-medium text-on-surface-variant">Travel</span></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Hub -->
+<div class="flex flex-col gap-3">
+<button class="w-full py-4 px-6 bg-gradient-to-r from-primary to-secondary text-on-primary rounded-full font-headline font-bold text-sm tracking-wide shadow-xl shadow-primary/20 hover:scale-[1.02] transition-transform flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-lg">check_circle</span>
+                        Finalize Itinerary
+                    </button>
+<button class="w-full py-4 px-6 bg-surface-container-lowest text-on-surface rounded-full font-headline font-bold text-sm tracking-wide border border-outline-variant/20 hover:bg-surface-container-low transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-lg">share</span>
+                        Share Preview
+                    </button>
+</div>
+</div>
+</aside>
+</main>
+<!-- Floating AI Assistant Button -->
+<div class="fixed bottom-8 right-8 z-[60] md:hidden">
+<button class="w-14 h-14 rounded-full bg-primary text-white shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</button>
+</div>
+<!-- Minimal Footer -->
+<footer class="bg-slate-50 dark:bg-slate-950 w-full py-12 px-6 mt-auto bg-slate-100 dark:bg-slate-900 border-t border-outline-variant/5">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-7xl mx-auto">
+<div class="flex flex-col gap-4">
+<span class="text-lg font-bold text-slate-900 dark:text-slate-100 font-headline">Yatri AI</span>
+<p class="font-['Inter'] text-sm text-slate-500 max-w-xs">© 2024 Yatri AI. Your Digital Curator. Crafting memories with the precision of intelligence.</p>
+</div>
+<div class="flex flex-wrap gap-x-8 gap-y-4 md:justify-end items-center">
+<a class="font-['Inter'] text-sm text-slate-500 hover:text-blue-500 transition-colors hover:underline" href="#">Testimonials</a>
+<a class="font-['Inter'] text-sm text-slate-500 hover:text-blue-500 transition-colors hover:underline" href="#">Privacy Policy</a>
+<a class="font-['Inter'] text-sm text-slate-500 hover:text-blue-500 transition-colors hover:underline" href="#">Terms of Service</a>
+<a class="font-['Inter'] text-sm text-slate-500 hover:text-blue-500 transition-colors hover:underline" href="#">Support</a>
+</div>
+</div>
+</footer>
+</body></html>

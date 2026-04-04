@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Yatri AI - Your Curated Trip</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error-container": "#ffdad6",
+                    "secondary-fixed": "#e1e0ff",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-container": "#fffbff",
+                    "inverse-primary": "#b8c3ff",
+                    "on-primary-container": "#fffbff",
+                    "surface-bright": "#f7f9fb",
+                    "on-secondary": "#ffffff",
+                    "inverse-on-surface": "#eff1f3",
+                    "surface-container-low": "#f2f4f6",
+                    "surface-dim": "#d8dadc",
+                    "on-background": "#191c1e",
+                    "outline-variant": "#c1c6d7",
+                    "on-error": "#ffffff",
+                    "on-surface": "#191c1e",
+                    "primary-container": "#3e65ff",
+                    "surface-variant": "#e0e3e5",
+                    "primary": "#0a47ee",
+                    "tertiary-fixed": "#dfe2ee",
+                    "on-primary-fixed": "#001356",
+                    "on-primary-fixed-variant": "#0035be",
+                    "secondary-container": "#6063ee",
+                    "tertiary-container": "#71747f",
+                    "surface-container-high": "#e6e8ea",
+                    "secondary-fixed-dim": "#c0c1ff",
+                    "outline": "#717786",
+                    "on-error-container": "#93000a",
+                    "primary-fixed": "#dde1ff",
+                    "on-tertiary-container": "#fefcff",
+                    "on-tertiary-fixed": "#171c24",
+                    "background": "#f7f9fb",
+                    "on-primary": "#ffffff",
+                    "tertiary": "#585c66",
+                    "on-secondary-fixed-variant": "#2f2ebe",
+                    "on-secondary-fixed": "#07006c",
+                    "on-tertiary": "#ffffff",
+                    "on-surface-variant": "#414754",
+                    "on-tertiary-fixed-variant": "#434750",
+                    "secondary": "#4648d4",
+                    "error": "#ba1a1a",
+                    "surface-container": "#eceef0",
+                    "surface": "#f7f9fb",
+                    "inverse-surface": "#2d3133",
+                    "surface-tint": "#124af0",
+                    "surface-container-highest": "#e0e3e5",
+                    "primary-fixed-dim": "#b8c3ff",
+                    "tertiary-fixed-dim": "#c3c6d2"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Plus Jakarta Sans"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        }
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-nav {
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+</head>
+<body class="bg-surface font-body text-on-surface antialiased">
+<!-- TopNavBar -->
+<header class="sticky top-0 w-full z-50 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] no-border transition-colors duration-300">
+<div class="flex justify-between items-center px-6 py-4 max-w-7xl mx-auto">
+<div class="flex items-center gap-8">
+<span class="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Yatri AI</span>
+<nav class="hidden md:flex items-center gap-6 font-['Plus_Jakarta_Sans'] font-medium text-sm tracking-tight">
+<a class="text-slate-600 dark:text-slate-400 hover:text-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all duration-200" href="#">Home</a>
+<a class="text-blue-600 dark:text-blue-400 font-bold border-b-2 border-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-900/20 transition-all duration-200" href="#">My Trips</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-600 dark:text-slate-400 hover:text-blue-500 scale-105 active:scale-95 transition-transform">Login</button>
+<span class="material-symbols-outlined text-blue-600 dark:text-blue-400 cursor-pointer">account_circle</span>
+</div>
+</div>
+</header>
+<main class="max-w-7xl mx-auto px-6 py-8 space-y-12">
+<!-- Hero Section - Asymmetric Editorial Layout -->
+<section class="relative grid grid-cols-1 md:grid-cols-12 gap-8 items-center pt-8">
+<div class="md:col-span-7 space-y-6">
+<div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-container/10 text-primary font-medium text-sm">
+<span class="material-symbols-outlined text-sm">auto_awesome</span>
+<span>AI-Curated Experience</span>
+</div>
+<h1 class="text-display-lg font-headline font-extrabold text-5xl md:text-6xl tracking-tight leading-tight">
+                    Coastal Serenity <br/>
+<span class="text-primary">in Santorini</span>
+</h1>
+<p class="text-on-surface-variant text-lg max-w-xl leading-relaxed">
+                    A 7-day immersive journey through white-washed alleys, volcanic beaches, and the world's most breathtaking sunsets, meticulously planned by Yatri AI.
+                </p>
+</div>
+<div class="md:col-span-5 relative group">
+<div class="aspect-[4/5] rounded-xl overflow-hidden shadow-2xl rotate-2 transition-transform group-hover:rotate-0 duration-500">
+<img class="w-full h-full object-cover" data-alt="Sun-drenched white buildings of Oia Santorini overlooking the deep blue Aegean sea during midday" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCeV7UYyw9DMO-SdnMctW6sOD7eBbDr9Smt7G-by8wfbpvXrUvkJ7k7YTy78oE93Quhvz_0p3057L3oByxEESJjzI5qndOfv-2tJ1W4Qjr4zd1_Ggj4SvA320W_etT-1Mas0ByXxNzkLKbAEIsCk5gn9ZmbLENf7MalXyPL9OhTDRk4m9Umak69xaUhlrf0MLhVDDLMOjEQQkHxSRfnJXus8ntwdtmrHEFTAV59JhBRwd3SOiLqrcFVPWrnDvAh9GI71ilGCqhB7zjw"/>
+</div>
+<div class="absolute -bottom-6 -left-6 w-48 aspect-square rounded-lg overflow-hidden shadow-xl -rotate-6 transition-transform group-hover:rotate-0 duration-500 border-4 border-white">
+<img class="w-full h-full object-cover" data-alt="Close up of a vibrant pink bougainvillea flower against a stark white Greek wall with blue window frames" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDKzaDwTTrFTb1nO76HiT6UZkHNmW5UqPyz-ZS8h197uOjezuJuOBJlkyYbcIynyUy-NuraaxWRcq_zgHIP1QdTMOFPjOSAhNj0W2ILykuTQ0VQCXWtFnGRU-0ddZIDpLuAwAthKiTmKyLQ1yZtRRmZLlsfWrtbmMmU35xvTqpjCLYeM-5HfvNXri0iWReCW4Jp3gQlJ48vJ8nxwtCJ7b9p4e1bzrloZqK1FC5hIVHswgA3pu4WWM1MEsU1yBKl7aj4Yw-WpFbKwLQZ"/>
+</div>
+</div>
+</section>
+<!-- Dynamic Multi-Tab Interface -->
+<section class="space-y-8">
+<div class="flex items-center gap-2 overflow-x-auto pb-4 scrollbar-hide border-b border-outline-variant/15">
+<button class="px-6 py-3 rounded-full text-slate-500 hover:text-primary transition-colors font-medium whitespace-nowrap">Overview</button>
+<button class="px-6 py-3 rounded-full bg-primary text-white font-semibold whitespace-nowrap shadow-lg shadow-primary/20">Itinerary</button>
+<button class="px-6 py-3 rounded-full text-slate-500 hover:text-primary transition-colors font-medium whitespace-nowrap">Hotels</button>
+<button class="px-6 py-3 rounded-full text-slate-500 hover:text-primary transition-colors font-medium whitespace-nowrap">Places</button>
+<button class="px-6 py-3 rounded-full text-slate-500 hover:text-primary transition-colors font-medium whitespace-nowrap">Map</button>
+</div>
+<!-- Itinerary Content (Selected State) -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-12">
+<div class="md:col-span-4 space-y-4">
+<div class="sticky top-28 p-8 rounded-lg bg-surface-container-low space-y-6">
+<h3 class="font-headline font-bold text-xl">Trip Highlights</h3>
+<ul class="space-y-4">
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-sm font-medium">Sunset Cruise in Oia</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-sm font-medium">Private Wine Tasting at Boutari</span>
+</li>
+<li class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-sm font-medium">Fira to Imerovigli Hiking</span>
+</li>
+</ul>
+<div class="pt-6">
+<button class="w-full py-4 rounded-full bg-gradient-to-r from-primary to-secondary text-white font-bold hover:shadow-lg transition-all">Download PDF</button>
+</div>
+</div>
+</div>
+<div class="md:col-span-8 space-y-12 relative">
+<div class="absolute left-[27px] top-4 bottom-4 w-px bg-outline-variant/30"></div>
+<!-- Day 1 -->
+<div class="relative pl-16">
+<div class="absolute left-0 top-0 w-14 h-14 rounded-full bg-white shadow-md flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-primary">flight_land</span>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h4 class="font-headline font-bold text-2xl">Day 1: Arrival &amp; Fira Explorer</h4>
+<span class="text-sm text-outline font-medium px-3 py-1 rounded-full bg-surface-container-high">May 12</span>
+</div>
+<div class="p-8 rounded-lg bg-surface-container-lowest shadow-sm border border-outline-variant/10 space-y-4 group hover:scale-[1.01] transition-transform">
+<p class="text-on-surface-variant leading-relaxed">Welcome to Santorini! After checking into your cliffside villa, take a gentle stroll through the labyrinthine streets of Fira. Enjoy your first Greek salad overlooking the caldera.</p>
+<div class="grid grid-cols-2 gap-4">
+<div class="aspect-video rounded-md overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover" data-alt="An evening view of Fira with golden lights beginning to sparkle as the sun goes down over the sea" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJc46pKnecfRPgHuprhVSqtDlK26-XJyNRfxPEMOMpqFDdkjeT4thh1o6w-guaoQiJIbnxJDKgHinJ5AIe4dpG2iAWhkBhExcQyffhpcmSsyfSwQMucpPcCbKw8uugM7e3F471KP3Mnclfg3EPNOrUc1QrzAaMGPfaOetRt91gB9Md_30SYYgM08h9hewEzy1ZKe0F6CHfMpnRg-6-UGRb-ydcdGm5r0vDkGffkSOBNMCy3X7ed8IPEZbI_hSTi0Ui3RFKu96qVRME"/>
+</div>
+<div class="flex flex-col justify-center gap-2 p-4 bg-surface-container-low rounded-md">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-sm">restaurant</span>
+<span class="text-xs font-bold uppercase tracking-wider">Lunch Recommendation</span>
+</div>
+<p class="text-sm font-semibold">Argo Restaurant</p>
+<p class="text-xs text-on-surface-variant">Best view in Fira with traditional seafood.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Day 2 -->
+<div class="relative pl-16">
+<div class="absolute left-0 top-0 w-14 h-14 rounded-full bg-white shadow-md flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-primary">hiking</span>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h4 class="font-headline font-bold text-2xl">Day 2: The Caldera Hike</h4>
+<span class="text-sm text-outline font-medium px-3 py-1 rounded-full bg-surface-container-high">May 13</span>
+</div>
+<div class="p-8 rounded-lg bg-surface-container-lowest shadow-sm border border-outline-variant/10 space-y-4 group hover:scale-[1.01] transition-transform">
+<p class="text-on-surface-variant leading-relaxed">Embark on the iconic trail from Fira to Oia. This 10km hike offers unparalleled views of the volcanic rim and takes you through the quiet village of Imerovigli.</p>
+<div class="bg-primary/5 p-4 rounded-md flex items-center gap-4">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">info</span>
+<span class="text-sm font-medium">Pro-tip: Start by 8:00 AM to avoid the midday heat. Wear comfortable sneakers!</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Hotels Section (Preview Card Layout) -->
+<section class="space-y-8 pt-12">
+<div class="flex justify-between items-end">
+<div class="space-y-2">
+<h2 class="text-headline-sm font-headline font-bold text-3xl">Curated Accommodations</h2>
+<p class="text-on-surface-variant">Top-rated villas hand-picked for your preference of "Quiet Luxury"</p>
+</div>
+<button class="text-primary font-bold flex items-center gap-1 hover:underline">
+                    View All <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<!-- Hotel Card 1 -->
+<div class="group rounded-lg bg-surface-container-lowest overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300">
+<div class="aspect-video overflow-hidden p-2">
+<img class="w-full h-full object-cover rounded-md group-hover:scale-110 transition-transform duration-500" data-alt="Luxury infinity pool at a Santorini hotel merging with the blue horizon of the Aegean sea at dusk" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJYDDyJfJl_SNVrNFqUjAS59KOsQ_R8ceEGgL0DCY5vfY6GGrUTKQtT11H5XydYhoDdCAjd87HEF-kxyUjEulbzCFZCPechKdMKAI7Aa-mF0Ge4yekAeJpZA-jyYmG9nffasF1B_YF0U-tiQyrXGQOVHnFkH-Fh58ntkSyv1gJOhXKvmCmZdRfcmUhta9btOko8O4NGBI5vhBvqaxgEGkmjL2tlKk75MfiMaPymPXbyyC3pbtGjovhuifA7zc1c7IwKnwEVOquBYpY"/>
+</div>
+<div class="p-6 space-y-4">
+<div class="flex justify-between items-start">
+<h3 class="font-bold text-xl">Canaves Oia Epitome</h3>
+<div class="flex items-center gap-1 bg-yellow-100 px-2 py-1 rounded text-yellow-800 text-xs font-bold">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">star</span>
+                                4.9
+                            </div>
+</div>
+<p class="text-on-surface-variant text-sm line-clamp-2">Exclusive villa retreat on the northern part of Oia, offering privacy and sunset views.</p>
+<div class="flex justify-between items-center pt-2">
+<span class="text-2xl font-extrabold text-primary">$850<span class="text-sm font-normal text-on-surface-variant">/night</span></span>
+<span class="px-4 py-2 rounded-full border border-primary text-primary text-xs font-bold group-hover:bg-primary group-hover:text-white transition-colors">Select Room</span>
+</div>
+</div>
+</div>
+<!-- Hotel Card 2 -->
+<div class="group rounded-lg bg-surface-container-lowest overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300">
+<div class="aspect-video overflow-hidden p-2">
+<img class="w-full h-full object-cover rounded-md group-hover:scale-110 transition-transform duration-500" data-alt="Minimalist luxury hotel exterior with smooth white plaster and natural wood accents against a clear sky" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAm1PFhUPYXjqCEGc2lICISgRE2XmQZ2WZj8nPvzOW_UIwmJAfRT7pWiHPsGjP7Xn0KzcEQ6tSvKtaMY3dDDyg-aigsz6aWnCldY2a1y8zK6Ptc1gPRoO4vBJxMH0DtYgZ6xFybJ12jqq6NONuqkpw-Cm36KDDOp5WoFdUPb9_g1gYAlgomusfwB81vIplAHGlpbugHZ6AKi3bx-1LiNj1cjGYnxe4ZkCzYfzT_SCWkv3YNefLQF-AUbn1ePDLdvE98F6PfM6FxqLuc"/>
+</div>
+<div class="p-6 space-y-4">
+<div class="flex justify-between items-start">
+<h3 class="font-bold text-xl">Grace Hotel</h3>
+<div class="flex items-center gap-1 bg-yellow-100 px-2 py-1 rounded text-yellow-800 text-xs font-bold">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">star</span>
+                                4.8
+                            </div>
+</div>
+<p class="text-on-surface-variant text-sm line-clamp-2">Iconic boutique hotel carved into the cliffside with legendary hospitality.</p>
+<div class="flex justify-between items-center pt-2">
+<span class="text-2xl font-extrabold text-primary">$620<span class="text-sm font-normal text-on-surface-variant">/night</span></span>
+<span class="px-4 py-2 rounded-full border border-primary text-primary text-xs font-bold group-hover:bg-primary group-hover:text-white transition-colors">Select Room</span>
+</div>
+</div>
+</div>
+<!-- Hotel Card 3 -->
+<div class="group rounded-lg bg-surface-container-lowest overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300">
+<div class="aspect-video overflow-hidden p-2">
+<img class="w-full h-full object-cover rounded-md group-hover:scale-110 transition-transform duration-500" data-alt="Interior of a luxury cave-style hotel suite in Greece with warm ambient lighting and soft linens" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDiRSIXROMYH0izZFwm7tE31AkVUZmhvMzSY3qAE7fPef9QK3YNk8ARsFng8y6c8t3WRUiQWa2XbYUgMFjuvvyrT6NTIiaTZhT6I8WW4jzvH0ilmjtyB9bdpYU3NgOvghhi9bURTvsoISZakRrXVxaF6PePSE4UAZJREeVVUzD7dcv8kVm_v-2xJTbzR1XQWrNBMEDDFs3j0niADLwlpNK0Pq625WsUBEG897sJ5op5MlciHQIS72SYD2HvUkVLK8v5xFtJzYVN2-g2"/>
+</div>
+<div class="p-6 space-y-4">
+<div class="flex justify-between items-start">
+<h3 class="font-bold text-xl">Katikies Santorini</h3>
+<div class="flex items-center gap-1 bg-yellow-100 px-2 py-1 rounded text-yellow-800 text-xs font-bold">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">star</span>
+                                5.0
+                            </div>
+</div>
+<p class="text-on-surface-variant text-sm line-clamp-2">The definition of white-on-white elegance with multiple infinity pools.</p>
+<div class="flex justify-between items-center pt-2">
+<span class="text-2xl font-extrabold text-primary">$1,200<span class="text-sm font-normal text-on-surface-variant">/night</span></span>
+<span class="px-4 py-2 rounded-full border border-primary text-primary text-xs font-bold group-hover:bg-primary group-hover:text-white transition-colors">Select Room</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Map Placeholder Section -->
+<section class="space-y-6 pt-12">
+<h2 class="text-headline-sm font-headline font-bold text-3xl">Interactive Route</h2>
+<div class="w-full aspect-[21/9] rounded-lg overflow-hidden bg-surface-container-high relative border border-outline-variant/20">
+<!-- Mock Map UI -->
+<div class="absolute inset-0 bg-[#e5e3df]" data-location="Santorini, Greece" style="">
+<img class="w-full h-full object-cover opacity-40 grayscale" data-alt="Topographic map style background of a volcanic island archipelago in a deep blue ocean" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB522XPbdBVQUYiR5IcgTXc5d76dPxeh6foTM4BHDM6vKNxwtgD4Rr18WmpjQSWyV_rQgTa19Hko5kG6DlPz_KOe0lxF4f1WAnrsiIAk4Lr1kGNK6AG-HEQD9U1SdrEhVnJPyVjSQg1zO2mKXMgx_9zGJZ55U7mkzd-BdLOCGQAn2iFoZv5LOCywH8EybRMhauNfhFKyvbWcPBk6IRpPb-RjsFnl9dPtkoizxMtRmYmcZVYLPn0MlG64ixq925QXUaMGFMsW6Pn38qN"/>
+<!-- Mock Markers -->
+<div class="absolute top-1/4 left-1/3 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center shadow-lg border-2 border-white">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+<span class="mt-2 px-3 py-1 bg-white rounded-full shadow-sm text-xs font-bold">Fira</span>
+</div>
+<div class="absolute top-1/2 left-1/2 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-secondary text-white flex items-center justify-center shadow-lg border-2 border-white">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">hotel</span>
+</div>
+<span class="mt-2 px-3 py-1 bg-white rounded-full shadow-sm text-xs font-bold">Your Hotel</span>
+</div>
+<div class="absolute top-1/3 right-1/4 flex flex-col items-center">
+<div class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center shadow-lg border-2 border-white">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+<span class="mt-2 px-3 py-1 bg-white rounded-full shadow-sm text-xs font-bold">Oia</span>
+</div>
+<!-- Map Overlay UI -->
+<div class="absolute bottom-6 right-6 flex flex-col gap-2">
+<button class="w-10 h-10 rounded-lg bg-white shadow-md flex items-center justify-center text-on-surface hover:bg-slate-50">
+<span class="material-symbols-outlined">add</span>
+</button>
+<button class="w-10 h-10 rounded-lg bg-white shadow-md flex items-center justify-center text-on-surface hover:bg-slate-50">
+<span class="material-symbols-outlined">remove</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-slate-50 dark:bg-slate-950 w-full py-12 px-6 mt-auto bg-slate-100 dark:bg-slate-900">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-7xl mx-auto">
+<div class="space-y-4">
+<span class="text-lg font-bold text-slate-900 dark:text-slate-100">Yatri AI</span>
+<p class="font-['Inter'] text-sm text-slate-500">© 2024 Yatri AI. Your Digital Curator.</p>
+</div>
+<div class="flex flex-wrap gap-x-8 gap-y-4 justify-start md:justify-end">
+<a class="text-slate-500 hover:text-blue-500 transition-colors font-['Inter'] text-sm hover:underline opacity-80 hover:opacity-100" href="#">Testimonials</a>
+<a class="text-slate-500 hover:text-blue-500 transition-colors font-['Inter'] text-sm hover:underline opacity-80 hover:opacity-100" href="#">Privacy Policy</a>
+<a class="text-slate-500 hover:text-blue-500 transition-colors font-['Inter'] text-sm hover:underline opacity-80 hover:opacity-100" href="#">Terms of Service</a>
+<a class="text-slate-500 hover:text-blue-500 transition-colors font-['Inter'] text-sm hover:underline opacity-80 hover:opacity-100" href="#">Support</a>
+</div>
+</div>
+</footer>
+<!-- Floating AI Assistant Button -->
+<div class="fixed bottom-8 right-8 z-[100]">
+<button class="group flex items-center gap-3 bg-gradient-to-r from-primary to-secondary p-1 pl-6 rounded-full shadow-2xl hover:scale-105 transition-all duration-300">
+<span class="text-white font-bold text-sm">Ask Yatri AI</span>
+<div class="w-12 h-12 rounded-full bg-white flex items-center justify-center text-primary shadow-inner">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+</button>
+</div>
+</body></html>

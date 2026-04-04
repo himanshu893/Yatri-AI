@@ -1,7 +1,7 @@
 import os
 import time
 import requests
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional, Tuple
 from tavily import TavilyClient
 from dotenv import load_dotenv
 
@@ -20,70 +20,284 @@ def reset_tavily_counter():
 # coordinates cache — geocode once, reuse forever
 _coords_cache = {}
 
-def get_coordinates(destination: str):
+def get_coordinates(destination: str) -> Tuple[Optional[float], Optional[float]]:
+    """
+    Resolve destination to lat/lon via Open-Meteo geocoding.
+    Never reads from stdin — ambiguous names use the highest-population match.
+    For explicit picks, the API should send destination_lat/lng from /destinations/search.
+    """
     if destination.lower() in _coords_cache:
         return _coords_cache[destination.lower()]
 
-    def call_geocoding(name: str):
+    def call_geocoding(name: str, count: int = 10):
         return requests.get(
             "https://geocoding-api.open-meteo.com/v1/search",
             params={
                 "name": name,
-                "count": 5,
+                "count": count,
                 "language": "en",
-                "format": "json"
-            }
+                "format": "json",
+            },
+            timeout=20,
         ).json()
 
     data = call_geocoding(destination)
-    
-    # Fallback if specific string fails (e.g. "Manali Himachal Pradesh India" -> "Manali")
+
     if not data.get("results") and "," in destination:
-        search_name = destination.split(',')[0].strip()
+        search_name = destination.split(",")[0].strip()
         data = call_geocoding(search_name)
-    
+
     if not data.get("results"):
         return None, None
 
-    results = data["results"]
+    results = list(data["results"])
+    # Prefer larger settlements when the query is ambiguous (no terminal prompt).
+    results.sort(key=lambda r: -(r.get("population") or 0))
 
-    # If only one result — use it directly
-    if len(results) == 1:
-        r = results[0]
-        _coords_cache[destination.lower()] = (r["latitude"], r["longitude"])
-        return r["latitude"], r["longitude"]
+    r = results[0]
+    lat, lon = r["latitude"], r["longitude"]
+    _coords_cache[destination.lower()] = (lat, lon)
+    if len(results) > 1:
+        print(
+            f"📍 Using '{r['name']}, {r.get('admin1', '?')}' "
+            f"(largest population among {len(results)} matches). "
+            "Use the web UI to pick a different place."
+        )
+    return lat, lon
 
-    # Check if all results are same state — no ambiguity
-    states = set(r.get("admin1", "") for r in results)
-    if len(states) == 1:
-        r = results[0]
-        _coords_cache[destination.lower()] = (r["latitude"], r["longitude"])
-        return r["latitude"], r["longitude"]
 
-    # Multiple different states found — ask user!
-    print(f"\n🤔 Multiple '{destination}' found:")
-    for i, r in enumerate(results, 1):
-        print(f"  {i}. {r['name']}, {r.get('admin1', '?')}, {r.get('country', '')}")
+def _open_meteo_geocode_raw(name: str, count: int = 10) -> List[Dict[str, Any]]:
+    data = requests.get(
+        "https://geocoding-api.open-meteo.com/v1/search",
+        params={
+            "name": name.strip(),
+            "count": count,
+            "language": "en",
+            "format": "json",
+        },
+        timeout=20,
+    ).json()
+    return list(data.get("results") or [])
 
-    while True:
-        try:
-            choice = int(input(f"\nWhich {destination} did you mean? (1-{len(results)}): "))
-            if 1 <= choice <= len(results):
-                chosen = results[choice - 1]
-                lat, lon = chosen["latitude"], chosen["longitude"]
-                # Cache with state name too for future
-                _coords_cache[destination.lower()] = (lat, lon)
-                print(f"✅ Got it! Using {chosen['name']}, {chosen.get('admin1')}")
-                return lat, lon
-        except ValueError:
-            pass
-        print("Please enter a valid number.")
-def get_weather_data(destination: str) -> Dict[str, Any]:
+
+def search_serpapi_maps_local_results(
+    query: str,
+    limit: int = 10,
+    gl: str = "in",
+    hl: str = "en",
+) -> List[Dict[str, Any]]:
+    """Top local_results from SerpAPI Google Maps (POIs / places)."""
+    api_key = os.getenv("SERPAPI_KEY")
+    if not api_key:
+        return []
+
+    q = f"{query.strip()}, India"
+    params = {
+        "engine": "google_maps",
+        "type": "search",
+        "q": q,
+        "gl": gl,
+        "hl": hl,
+        "api_key": api_key,
+    }
     try:
-        lat, lon = get_coordinates(destination)
-        if not lat:
-            return {"error": f"Could not find location: {destination}"}
-        
+        response = requests.get("https://serpapi.com/search", params=params, timeout=30)
+        data = response.json()
+        if data.get("error"):
+            print(f"⚠️  SerpAPI Maps search: {data['error']}")
+            return []
+        rows = data.get("local_results") or []
+        if not rows and data.get("place_results"):
+            rows = [data["place_results"]]
+        return rows[:limit]
+    except Exception as e:
+        print(f"❌ SerpAPI Maps search failed: {e}")
+        return []
+
+
+def search_destination_candidates(
+    raw_query: str,
+    per_source: int = 10,
+    max_total: int = 16,
+) -> List[Dict[str, Any]]:
+    """
+    Merged place suggestions for UI pickers: Open-Meteo (admin areas + cities)
+    plus SerpAPI Google Maps (tourist / POI style). Deduped by rounded coordinates.
+    """
+    q = raw_query.strip()
+    if not q:
+        return []
+
+    seen: set = set()
+    out: List[Dict[str, Any]] = []
+
+    def add_candidate(
+        cid: str,
+        name: str,
+        label: str,
+        lat: float,
+        lng: float,
+        source: str,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        key = (round(lat, 3), round(lng, 3))
+        if key in seen:
+            return
+        seen.add(key)
+        row: Dict[str, Any] = {
+            "id": cid,
+            "name": name,
+            "label": label,
+            "lat": lat,
+            "lng": lng,
+            "source": source,
+        }
+        if extra:
+            row.update(extra)
+        out.append(row)
+
+    # 1) Open-Meteo — up to `per_source` geographic matches
+    for i, r in enumerate(_open_meteo_geocode_raw(q, count=per_source)):
+        lat, lng = r["latitude"], r["longitude"]
+        admin1 = r.get("admin1") or ""
+        country = r.get("country") or ""
+        nm = r.get("name") or q
+        label = ", ".join(x for x in (nm, admin1, country) if x)
+        add_candidate(
+            f"om:{r.get('id', i)}",
+            nm,
+            label,
+            float(lat),
+            float(lng),
+            "open_meteo",
+            {
+                "region": admin1,
+                "country": country,
+                "population": r.get("population"),
+            },
+        )
+        if len(out) >= max_total:
+            return out
+
+    # 2) SerpAPI Google Maps — up to `per_source` place-style results
+    for i, row in enumerate(search_serpapi_maps_local_results(q, limit=per_source)):
+        gps = row.get("gps_coordinates") or {}
+        lat, lng = gps.get("latitude"), gps.get("longitude")
+        if lat is None or lng is None:
+            continue
+        title = (row.get("title") or q).strip()
+        addr = (row.get("address") or "").strip()
+        label = f"{title}" + (f", {addr}" if addr else "")
+        add_candidate(
+            f"gm:{row.get('place_id') or i}",
+            title,
+            label,
+            float(lat),
+            float(lng),
+            "google_maps",
+            {"address": addr or None, "rating": row.get("rating"), "reviews": row.get("reviews")},
+        )
+        if len(out) >= max_total:
+            break
+
+    return out
+
+
+def geocode_place_google_maps_serpapi(
+    place_query: str,
+    destination_context: str = "",
+    gl: str = "in",
+    hl: str = "en",
+) -> Optional[Dict[str, Any]]:
+    """
+    Geocode a place name for map pins using SerpAPI Google Maps search.
+    Returns dict with name, lat, lng, address (if present) or None.
+    """
+    api_key = os.getenv("SERPAPI_KEY")
+    if not api_key:
+        return None
+
+    q = place_query.strip()
+    if destination_context:
+        q = f"{q}, {destination_context}"
+
+    params = {
+        "engine": "google_maps",
+        "type": "search",
+        "q": q,
+        "gl": gl,
+        "hl": hl,
+        "api_key": api_key,
+    }
+
+    try:
+        response = requests.get("https://serpapi.com/search", params=params, timeout=30)
+        data = response.json()
+        if data.get("error"):
+            print(f"⚠️  SerpAPI Maps error: {data['error']}")
+            return None
+
+        rows = data.get("local_results") or []
+        if not rows and data.get("place_results"):
+            rows = [data["place_results"]]
+        if not rows:
+            return None
+
+        top = rows[0]
+        gps = top.get("gps_coordinates") or {}
+        lat = gps.get("latitude")
+        lng = gps.get("longitude")
+        if lat is None or lng is None:
+            return None
+
+        return {
+            "title": top.get("title") or place_query,
+            "lat": float(lat),
+            "lng": float(lng),
+            "address": top.get("address"),
+            "place_id": top.get("place_id"),
+        }
+    except Exception as e:
+        print(f"❌ SerpAPI Maps geocode failed for {place_query!r}: {e}")
+        return None
+
+
+def geocode_itinerary_stops_serpapi(
+    place_queries: List[str],
+    destination: str,
+    max_stops: int = 12,
+) -> List[Dict[str, Any]]:
+    """
+    Geocode an ordered list of itinerary stops (deduped). One SerpAPI call per stop.
+    """
+    ctx = f"{destination}, India" if destination else "India"
+    seen: set = set()
+    out: List[Dict[str, Any]] = []
+    for i, raw in enumerate(place_queries):
+        if len(out) >= max_stops:
+            break
+        key = raw.strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        g = geocode_place_google_maps_serpapi(raw, destination_context=ctx)
+        if g:
+            out.append(
+                {
+                    "order": len(out),
+                    "query": raw,
+                    "name": g["title"],
+                    "lat": g["lat"],
+                    "lng": g["lng"],
+                    "address": g.get("address"),
+                }
+            )
+        time.sleep(0.25)  # light pacing for SerpAPI
+    return out
+
+
+def get_weather_data_at_coords(lat: float, lon: float) -> Dict[str, Any]:
+    try:
         response = requests.get(
             "https://api.open-meteo.com/v1/forecast",
             params={
@@ -92,21 +306,29 @@ def get_weather_data(destination: str) -> Dict[str, Any]:
                 "current": "temperature_2m,snowfall,rain,windspeed_10m",
                 "daily": "sunrise,sunset,temperature_2m_max,temperature_2m_min",
                 "timezone": "Asia/Kolkata",
-                "forecast_days": 1
-            }
+                "forecast_days": 1,
+            },
+            timeout=25,
         )
         data = response.json()
         return {
-            "temp":        data["current"]["temperature_2m"],
-            "snowfall":    data["current"]["snowfall"] > 0,
-            "rainfall":    data["current"]["rain"] > 0,
-            "windspeed":   data["current"]["windspeed_10m"],
+            "temp": data["current"]["temperature_2m"],
+            "snowfall": data["current"]["snowfall"] > 0,
+            "rainfall": data["current"]["rain"] > 0,
+            "windspeed": data["current"]["windspeed_10m"],
             "sunset_time": data["daily"]["sunset"][0].split("T")[1],
-            "max_temp":    data["daily"]["temperature_2m_max"][0],
-            "min_temp":    data["daily"]["temperature_2m_min"][0],
+            "max_temp": data["daily"]["temperature_2m_max"][0],
+            "min_temp": data["daily"]["temperature_2m_min"][0],
         }
     except Exception as e:
         return {"error": f"Weather fetch failed: {str(e)}"}
+
+
+def get_weather_data(destination: str) -> Dict[str, Any]:
+    lat, lon = get_coordinates(destination)
+    if not lat:
+        return {"error": f"Could not find location: {destination}"}
+    return get_weather_data_at_coords(lat, lon)
 
 
 

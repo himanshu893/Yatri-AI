@@ -26,6 +26,11 @@ class AgentState(TypedDict):
     travel_month: Optional[str]    # add — December vs April changes everything
     num_people: Optional[int]      # add — 1 person vs 4 people changes budget
     origin: Optional[str]          # add — where they're travelling FROM
+    nights: Optional[int]
+    # Resolved from UI / geocoder (skip terminal disambiguation)
+    destination_lat: Optional[float]
+    destination_lng: Optional[float]
+    destination_label: Optional[str]
 
     # ── Research ───────────────────────────
     weather_data: Optional[WeatherData]

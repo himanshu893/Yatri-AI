@@ -9,6 +9,9 @@ initial_state = {
     "num_people":       None,
     "nights":           None,
     "origin":           None,
+    "destination_lat":  None,
+    "destination_lng":  None,
+    "destination_label": None,
 
     # Research
     "weather_data":     None,
