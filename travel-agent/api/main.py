@@ -17,7 +17,11 @@ load_dotenv(_ROOT / ".env")
 
 from agent.graph import app as graph_app
 from agent.itinerary_places import extract_place_candidates_from_itinerary
-from agent.tools import geocode_itinerary_stops_serpapi, search_destination_candidates
+from agent.tools import (
+    geocode_hotels_for_map,
+    geocode_itinerary_stops_serpapi,
+    search_destination_candidates,
+)
 
 from api.schemas import (
     DestinationCandidate,
@@ -89,6 +93,8 @@ def _build_response(result: dict) -> TripPlanResponse:
     dest = result.get("destination") or ""
     queries = extract_place_candidates_from_itinerary(itinerary)
     waypoints_raw = geocode_itinerary_stops_serpapi(queries, dest) if queries else []
+    hotels = result.get("hotels") or []
+    hotel_pins_raw = geocode_hotels_for_map(hotels, dest) if hotels else []
 
     waypoints = [
         MapWaypoint(
@@ -100,6 +106,17 @@ def _build_response(result: dict) -> TripPlanResponse:
             address=w.get("address"),
         )
         for w in waypoints_raw
+    ]
+    hotel_map_pins = [
+        MapWaypoint(
+            order=w["order"],
+            query=w["query"],
+            name=w["name"],
+            lat=w["lat"],
+            lng=w["lng"],
+            address=w.get("address"),
+        )
+        for w in hotel_pins_raw
     ]
 
     return TripPlanResponse(
@@ -126,6 +143,7 @@ def _build_response(result: dict) -> TripPlanResponse:
         budget_breakdown=result.get("budget_breakdown"),
         itinerary_place_queries=queries,
         map_waypoints=waypoints,
+        hotel_map_pins=hotel_map_pins,
         ask_user_flag=bool(result.get("ask_user_flag")),
         replan_count=int(result.get("replan_count") or 0),
     )

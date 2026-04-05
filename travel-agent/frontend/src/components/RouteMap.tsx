@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   DirectionsRenderer,
   GoogleMap,
@@ -7,17 +7,20 @@ import {
 } from "@react-google-maps/api";
 import type { MapWaypoint } from "../types";
 
-const mapContainerStyle = {
-  width: "100%",
-  height: "420px",
-  borderRadius: "16px",
-};
-
 type Props = {
-  waypoints: MapWaypoint[];
+  /** Ordered stops for driving directions (itinerary, SerpAPI). */
+  routeWaypoints: MapWaypoint[];
+  /** Extra pins (hotels), shown in red — not included in directions path. */
+  hotelPins?: MapWaypoint[];
+  /** Map height in pixels. */
+  height?: number;
 };
 
-export function RouteMap({ waypoints }: Props) {
+export function RouteMap({
+  routeWaypoints,
+  hotelPins = [],
+  height = 420,
+}: Props) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? "";
   const { isLoaded, loadError } = useJsApiLoader({
     id: "yatri-gmaps",
@@ -29,18 +32,36 @@ export function RouteMap({ waypoints }: Props) {
   >(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
 
+  const mapContainerStyle = useMemo(
+    () => ({
+      width: "100%",
+      height: `${height}px`,
+      borderRadius: "16px",
+    }),
+    [height],
+  );
+
+  const hotelIcon = useMemo(() => {
+    if (!isLoaded || typeof google === "undefined") return undefined;
+    return {
+      url: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+      scaledSize: new google.maps.Size(40, 40),
+      anchor: new google.maps.Point(20, 40),
+    };
+  }, [isLoaded]);
+
   const onMapLoad = useCallback((m: google.maps.Map) => {
     setMap(m);
   }, []);
 
   useEffect(() => {
     setDirections(null);
-    if (!isLoaded || !apiKey || waypoints.length < 2) return;
+    if (!isLoaded || !apiKey || routeWaypoints.length < 2) return;
 
     const svc = new google.maps.DirectionsService();
-    const origin = waypoints[0];
-    const dest = waypoints[waypoints.length - 1];
-    const middle = waypoints.slice(1, -1).map((w) => ({
+    const origin = routeWaypoints[0];
+    const dest = routeWaypoints[routeWaypoints.length - 1];
+    const middle = routeWaypoints.slice(1, -1).map((w) => ({
       location: { lat: w.lat, lng: w.lng },
       stopover: true,
     }));
@@ -58,59 +79,67 @@ export function RouteMap({ waypoints }: Props) {
         else setDirections(null);
       },
     );
-  }, [isLoaded, apiKey, waypoints]);
+  }, [isLoaded, apiKey, routeWaypoints]);
 
   useEffect(() => {
-    if (!map || waypoints.length === 0) return;
-    if (directions || waypoints.length < 2) {
+    if (!map) return;
+    const all = [...routeWaypoints, ...hotelPins];
+    if (all.length === 0) return;
+    if (directions || routeWaypoints.length < 2) {
       const bounds = new google.maps.LatLngBounds();
-      waypoints.forEach((w) =>
-        bounds.extend({ lat: w.lat, lng: w.lng }),
-      );
+      all.forEach((w) => bounds.extend({ lat: w.lat, lng: w.lng }));
       map.fitBounds(bounds, 56);
     }
-  }, [map, waypoints, directions]);
+  }, [map, routeWaypoints, hotelPins, directions]);
+
+  const fallback =
+    "flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-surface-low px-4 text-center text-sm text-muted";
 
   if (!apiKey) {
     return (
-      <div className="map-fallback">
-        Add <code>VITE_GOOGLE_MAPS_API_KEY</code> in <code>frontend/.env</code>{" "}
-        (enable Maps JavaScript API + Directions API) to draw the route.
+      <div className={fallback} style={{ minHeight: height }}>
+        Add <code className="text-ink">VITE_GOOGLE_MAPS_API_KEY</code> in{" "}
+        <code className="text-ink">frontend/.env</code>.
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <div className="map-fallback">Could not load Google Maps. Check the API key.</div>
+      <div className={fallback} style={{ minHeight: height }}>
+        Could not load Google Maps.
+      </div>
     );
   }
 
   if (!isLoaded) {
     return (
-      <div className="map-fallback">
-        <span className="spinner" style={{ margin: "0 auto" }} />
+      <div className={fallback} style={{ minHeight: height }}>
+        <span className="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-primary" />
         <p>Loading map…</p>
       </div>
     );
   }
 
-  if (waypoints.length === 0) {
+  if (routeWaypoints.length === 0 && hotelPins.length === 0) {
     return (
-      <div className="map-fallback">
-        Stops will appear here after your plan is generated. We geocode itinerary
-        places with SerpAPI and draw the driving path when possible.
+      <div className={fallback} style={{ minHeight: height }}>
+        No pins yet. Regenerate the plan with SerpAPI configured so stops and
+        hotels can be geocoded.
       </div>
     );
   }
 
-  const center = { lat: waypoints[0].lat, lng: waypoints[0].lng };
+  const center = {
+    lat: routeWaypoints[0]?.lat ?? hotelPins[0]?.lat ?? 20.5937,
+    lng: routeWaypoints[0]?.lng ?? hotelPins[0]?.lng ?? 78.9629,
+  };
 
   return (
     <GoogleMap
       mapContainerStyle={mapContainerStyle}
       center={center}
-      zoom={waypoints.length === 1 ? 12 : 9}
+      zoom={routeWaypoints.length + hotelPins.length <= 1 ? 12 : 9}
       onLoad={onMapLoad}
       options={{
         fullscreenControl: true,
@@ -118,7 +147,7 @@ export function RouteMap({ waypoints }: Props) {
         streetViewControl: false,
       }}
     >
-      {directions ? (
+      {directions && routeWaypoints.length >= 2 ? (
         <DirectionsRenderer
           directions={directions}
           options={{
@@ -130,14 +159,22 @@ export function RouteMap({ waypoints }: Props) {
           }}
         />
       ) : (
-        waypoints.map((w) => (
+        routeWaypoints.map((w) => (
           <Marker
-            key={`${w.order}-${w.lat}-${w.lng}`}
+            key={`r-${w.order}-${w.lat}-${w.lng}`}
             position={{ lat: w.lat, lng: w.lng }}
-            title={w.name}
+            title={`Stop: ${w.name}`}
           />
         ))
       )}
+      {hotelPins.map((w) => (
+        <Marker
+          key={`h-${w.order}-${w.lat}-${w.lng}`}
+          position={{ lat: w.lat, lng: w.lng }}
+          title={`Hotel: ${w.name}`}
+          icon={hotelIcon}
+        />
+      ))}
     </GoogleMap>
   );
 }

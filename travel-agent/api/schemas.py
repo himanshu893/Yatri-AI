@@ -83,6 +83,10 @@ class TripPlanResponse(BaseModel):
     budget_breakdown: Optional[Dict[str, Any]] = None
     itinerary_place_queries: List[str] = Field(default_factory=list)
     map_waypoints: List[MapWaypoint] = Field(default_factory=list)
+    hotel_map_pins: List[MapWaypoint] = Field(
+        default_factory=list,
+        description="Hotels geocoded via SerpAPI for map layer",
+    )
     ask_user_flag: bool = False
     replan_count: int = 0
 

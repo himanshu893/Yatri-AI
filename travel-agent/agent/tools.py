@@ -296,6 +296,43 @@ def geocode_itinerary_stops_serpapi(
     return out
 
 
+def geocode_hotels_for_map(
+    hotels: List[Dict[str, Any]],
+    destination: str,
+    max_hotels: int = 8,
+) -> List[Dict[str, Any]]:
+    """
+    SerpAPI Google Maps geocode for each hotel (name + location text) for map pins.
+    """
+    ctx = f"{destination}, India" if destination else "India"
+    out: List[Dict[str, Any]] = []
+    seen: set = set()
+    for h in (hotels or [])[:max_hotels]:
+        name = (h.get("name") or "").strip()
+        loc = (h.get("location") or "").strip()
+        if not name and not loc:
+            continue
+        query = f"{name} {loc}".strip() if loc else name
+        key = query.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        g = geocode_place_google_maps_serpapi(query, destination_context=ctx)
+        if g:
+            out.append(
+                {
+                    "order": len(out),
+                    "query": query,
+                    "name": g["title"],
+                    "lat": g["lat"],
+                    "lng": g["lng"],
+                    "address": g.get("address"),
+                }
+            )
+        time.sleep(0.22)
+    return out
+
+
 def get_weather_data_at_coords(lat: float, lon: float) -> Dict[str, Any]:
     try:
         response = requests.get(

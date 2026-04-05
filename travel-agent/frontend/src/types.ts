@@ -64,6 +64,7 @@ export type TripPlanResponse = {
   budget_breakdown?: Record<string, number> | null;
   itinerary_place_queries: string[];
   map_waypoints: MapWaypoint[];
+  hotel_map_pins?: MapWaypoint[];
   ask_user_flag: boolean;
   replan_count: number;
 };
