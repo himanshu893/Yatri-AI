@@ -2,6 +2,7 @@ import os
 import re
 import time
 import json
+import math
 import subprocess
 import requests
 from typing import Dict, Any, List, Optional
@@ -411,6 +412,40 @@ _PLACE_ALIASES = {
     "new delhi": "Delhi",
     "ndls": "Delhi",
     "nzm": "Delhi",
+    "bangalore": "Bengaluru",
+    "kullu manali": "Kullu",
+    "kullu manali airport": "Kullu",
+}
+
+
+_CITY_COORDINATES = {
+    "Agra": (27.1767, 78.0081),
+    "Ahmedabad": (23.0225, 72.5714),
+    "Amritsar": (31.6340, 74.8723),
+    "Aurangabad": (19.8762, 75.3433),
+    "Bengaluru": (12.9716, 77.5946),
+    "Bhopal": (23.2599, 77.4126),
+    "Chandigarh": (30.7333, 76.7794),
+    "Chennai": (13.0827, 80.2707),
+    "Delhi": (28.6139, 77.2090),
+    "Goa": (15.2993, 74.1240),
+    "Guwahati": (26.1445, 91.7362),
+    "Hyderabad": (17.3850, 78.4867),
+    "Indore": (22.7196, 75.8577),
+    "Jaipur": (26.9124, 75.7873),
+    "Kochi": (9.9312, 76.2673),
+    "Kolkata": (22.5726, 88.3639),
+    "Kullu": (31.9579, 77.1095),
+    "Manali": (32.2432, 77.1892),
+    "Mumbai": (19.0760, 72.8777),
+    "Nagpur": (21.1458, 79.0882),
+    "Nashik": (19.9975, 73.7898),
+    "Patna": (25.5941, 85.1376),
+    "Pune": (18.5204, 73.8567),
+    "Shimla": (31.1048, 77.1734),
+    "Srinagar": (34.0837, 74.7973),
+    "Surat": (21.1702, 72.8311),
+    "Varanasi": (25.3176, 82.9739),
 }
 
 
@@ -438,6 +473,7 @@ def _dedupe_transport_options(options: List[Dict[str, Any]]) -> List[Dict[str, A
     for option in options:
         key = (
             (option.get("type") or "").lower(),
+            str(option.get("name") or "").lower(),
             str(option.get("code") or "").upper(),
             str(option.get("route") or "").lower(),
         )
@@ -446,6 +482,68 @@ def _dedupe_transport_options(options: List[Dict[str, Any]]) -> List[Dict[str, A
         seen.add(key)
         deduped.append(option)
     return deduped
+
+
+def _coords_for_place(value: str) -> Optional[tuple]:
+    canonical = _canonical_place_name(value)
+    if canonical in _CITY_COORDINATES:
+        return _CITY_COORDINATES[canonical]
+
+    lowered = str(value or "").lower()
+    for city, coords in _CITY_COORDINATES.items():
+        if city.lower() in lowered:
+            return coords
+    return None
+
+
+def _haversine_km(a: tuple, b: tuple) -> float:
+    lat1, lon1 = map(math.radians, a)
+    lat2, lon2 = map(math.radians, b)
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    inner = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 6371 * 2 * math.asin(math.sqrt(inner))
+
+
+def _duration_from_km(distance_km: int) -> str:
+    hours = max(1, round(distance_km / 45))
+    if hours < 24:
+        return f"{hours} hour" if hours == 1 else f"{hours} hours"
+    return f"{hours // 24}d {hours % 24}h"
+
+
+def _build_taxi_transfer_option(
+    origin: str,
+    destination: str,
+    description: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    from_place = _canonical_place_name(origin) or str(origin or "").strip()
+    to_place = _canonical_place_name(destination) or str(destination or "").strip()
+    if not from_place or not to_place or from_place.lower() == to_place.lower():
+        return None
+
+    from_coords = _coords_for_place(origin)
+    to_coords = _coords_for_place(destination)
+    if not from_coords or not to_coords:
+        return None
+
+    road_km = max(5, round(_haversine_km(from_coords, to_coords) * 1.25))
+    sedan_fare = max(500, int(round((road_km * 18) / 50) * 50))
+    suv_fare = max(700, int(round((road_km * 26) / 50) * 50))
+    return _build_transport_option(
+        "taxi",
+        f"Taxi transfer {from_place} to {to_place}",
+        f"{from_place} to {to_place}",
+        "TAXI-EST",
+        _duration_from_km(road_km),
+        [
+            {"classType": "Sedan", "fare": f"₹{sedan_fare}", "status": f"Estimated {road_km} km road transfer"},
+            {"classType": "SUV", "fare": f"₹{suv_fare}", "status": f"Estimated {road_km} km road transfer"},
+        ],
+    ) | {
+        "description": description or "Intermediate road transfer estimate",
+        "estimated": True,
+    }
 
 
 def _parse_transport_options_from_text(raw_text: str) -> List[Dict[str, Any]]:
@@ -643,6 +741,12 @@ def _normalize_mode_scraper_output(raw: Optional[Dict[str, Any]], mode: str) -> 
             transport["fallback"] = True
         if opt.get("description"):
             transport["description"] = opt.get("description")
+        if opt.get("departure"):
+            transport["departure"] = opt.get("departure")
+        if opt.get("arrival"):
+            transport["arrival"] = opt.get("arrival")
+        if opt.get("estimated"):
+            transport["estimated"] = True
         normalized.append(transport)
     return normalized
 
@@ -680,6 +784,14 @@ def get_transport_options(
         for opt in hub_options:
             opt["description"] = f"Nearest rail hub for {destination}: {train_hub}"
         parsed.extend(hub_options)
+        if hub_options:
+            taxi_transfer = _build_taxi_transfer_option(
+                train_hub,
+                destination,
+                f"Intermediate taxi from rail hub {train_hub} to {destination}",
+            )
+            if taxi_transfer:
+                parsed.append(taxi_transfer)
 
     if not any(item["type"] == "flight" and not item.get("fallback") for item in parsed) and hubs.get("airport"):
         airport_hub = _canonical_place_name(hubs["airport"]) or hubs["airport"]
@@ -688,6 +800,14 @@ def get_transport_options(
         for opt in hub_options:
             opt["description"] = f"Nearest airport for {destination}: {airport_hub}"
         parsed.extend(hub_options)
+        if hub_options:
+            taxi_transfer = _build_taxi_transfer_option(
+                airport_hub,
+                destination,
+                f"Intermediate taxi from airport {airport_hub} to {destination}",
+            )
+            if taxi_transfer:
+                parsed.append(taxi_transfer)
 
     if not any(item["type"] == "bus" and not item.get("fallback") for item in parsed) and hubs.get("bus_terminal"):
         bus_hub = _canonical_place_name(hubs["bus_terminal"]) or hubs["bus_terminal"]
@@ -696,6 +816,14 @@ def get_transport_options(
         for opt in hub_options:
             opt["description"] = f"Nearest bus terminal for {destination}: {bus_hub}"
         parsed.extend(hub_options)
+        if hub_options:
+            taxi_transfer = _build_taxi_transfer_option(
+                bus_hub,
+                destination,
+                f"Intermediate taxi from bus hub {bus_hub} to {destination}",
+            )
+            if taxi_transfer:
+                parsed.append(taxi_transfer)
 
     parsed = _dedupe_transport_options(_real_options(parsed))
 

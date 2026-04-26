@@ -114,9 +114,12 @@ for mode_key, mode_emoji, mode_title in mode_meta:
         fare = option.get("fare")
         fare_text = f"₹{fare}" if fare is not None else "N/A"
         duration = option.get("duration", "N/A")
+        departure = option.get("departure")
+        arrival = option.get("arrival")
         title = f"{name} - {route}" if name and name != route else route
         print(f"    {title} [{code}]")
-        print(f"      💵 Fare: {fare_text}  🕐 {duration}")
+        time_text = f"{departure} → {arrival}" if departure and arrival else duration
+        print(f"      💵 Fare: {fare_text}  🕐 {time_text} ({duration})")
         if option.get("description"):
             print(f"      ℹ️ {option.get('description')}")
         for cls in option.get("classes", []):

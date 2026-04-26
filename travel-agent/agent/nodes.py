@@ -13,6 +13,7 @@ from agent.tools import (
     get_transport_options,
     get_nearest_hub_serpapi,
     _resolve_nearby_transit_hubs,
+    _build_taxi_transfer_option,
     reset_tavily_counter,
     _transport_type_priority,
 )
@@ -412,6 +413,15 @@ def search_node(state: AgentState) -> AgentState:
             state["transport_options"].extend(alt_options)
             added_alt_modes.add(alt["mode"])
 
+            taxi_transfer = _build_taxi_transfer_option(
+                alt["to"],
+                state["destination"],
+                f"Intermediate taxi after {alt['mode']} leg: {alt['to']} to {state['destination']}",
+            )
+            if taxi_transfer:
+                state["transport_options"].append(taxi_transfer)
+                state["transport_by_mode"].setdefault("taxi", []).append(taxi_transfer)
+
             alt_by_mode = alt_transport_data.get("by_mode", {})
             for mode, opts in alt_by_mode.items():
                 if mode != alt["mode"]:
@@ -451,6 +461,14 @@ def search_node(state: AgentState) -> AgentState:
                 for opt in alt_options:
                     opt["description"] = alt.get("description", f"Via {alt_origin} to {alt_dest}")
                 state["transport_options"].extend(alt_options)
+                taxi_transfer = _build_taxi_transfer_option(
+                    alt_dest,
+                    state["destination"],
+                    f"Intermediate taxi after {target_mode or 'transport'} leg: {alt_dest} to {state['destination']}",
+                )
+                if taxi_transfer:
+                    state["transport_options"].append(taxi_transfer)
+                    state["transport_by_mode"].setdefault("taxi", []).append(taxi_transfer)
                 # Update by_mode
                 alt_by_mode = alt_transport_data.get("by_mode", {})
                 for mode, opts in alt_by_mode.items():
@@ -472,6 +490,7 @@ def search_node(state: AgentState) -> AgentState:
             continue
         key = (
             (item.get("type") or "").lower(),
+            str(item.get("name") or "").lower(),
             str(item.get("code") or "").upper(),
             str(item.get("route") or "").lower(),
         )
