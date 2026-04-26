@@ -5,11 +5,17 @@ import json
 import math
 import subprocess
 import requests
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from tavily import TavilyClient
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+TRAVEL_AGENT_DIR = Path(__file__).resolve().parents[1]
+REPO_DIR = TRAVEL_AGENT_DIR.parent
+
+# Load both supported env locations. The travel-agent .env wins when both exist.
+load_dotenv(REPO_DIR / ".env")
+load_dotenv(TRAVEL_AGENT_DIR / ".env", override=True)
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY") or os.getenv("TAVILY_API") or os.getenv("TAILVY_API")
 SERPAPI_KEY = os.getenv("SERPAPI_KEY") or os.getenv("SERPAPI") or os.getenv("SERPAPI_KEY")
@@ -30,7 +36,11 @@ def reset_tavily_counter():
 # coordinates cache — geocode once, reuse forever
 _coords_cache = {}
 
-def get_coordinates(destination: str):
+def get_coordinates(destination: str, latitude: float = None, longitude: float = None):
+    if latitude is not None and longitude is not None:
+        _coords_cache[destination.lower()] = (latitude, longitude)
+        return latitude, longitude
+
     if destination.lower() in _coords_cache:
         return _coords_cache[destination.lower()]
 
@@ -70,27 +80,15 @@ def get_coordinates(destination: str):
         _coords_cache[destination.lower()] = (r["latitude"], r["longitude"])
         return r["latitude"], r["longitude"]
 
-    # Multiple different states found — ask user!
-    print(f"\n🤔 Multiple '{destination}' found:")
-    for i, r in enumerate(results, 1):
-        print(f"  {i}. {r['name']}, {r.get('admin1', '?')}, {r.get('country', '')}")
-
-    while True:
-        try:
-            choice = int(input(f"\nWhich {destination} did you mean? (1-{len(results)}): "))
-            if 1 <= choice <= len(results):
-                chosen = results[choice - 1]
-                lat, lon = chosen["latitude"], chosen["longitude"]
-                # Cache with state name too for future
-                _coords_cache[destination.lower()] = (lat, lon)
-                print(f"✅ Got it! Using {chosen['name']}, {chosen.get('admin1')}")
-                return lat, lon
-        except ValueError:
-            pass
-        print("Please enter a valid number.")
-def get_weather_data(destination: str) -> Dict[str, Any]:
+    # In API mode we cannot block on input. Prefer an India match, then first result.
+    chosen = next((r for r in results if r.get("country_code") == "IN"), results[0])
+    lat, lon = chosen["latitude"], chosen["longitude"]
+    _coords_cache[destination.lower()] = (lat, lon)
+    print(f"Using geocoding match: {chosen['name']}, {chosen.get('admin1')}")
+    return lat, lon
+def get_weather_data(destination: str, latitude: float = None, longitude: float = None) -> Dict[str, Any]:
     try:
-        lat, lon = get_coordinates(destination)
+        lat, lon = get_coordinates(destination, latitude, longitude)
         if not lat:
             return {"error": f"Could not find location: {destination}"}
         
@@ -158,6 +156,8 @@ def get_hotel_prices_serpapi(
     nights: int = 3,
     adults: int = 2,
     max_price: int = None,
+    latitude: float = None,
+    longitude: float = None,
 ) -> list:
     """
     Fetches real-time hotel prices from Google Hotels
@@ -190,8 +190,15 @@ def get_hotel_prices_serpapi(
         "currency": "INR",
         "gl": "in",
         "hl": "en",
-        "api_key": os.getenv("SERPAPI_KEY"),
+        "api_key": SERPAPI_KEY,
     }
+    if latitude and longitude:
+        # Some SerpAPI engines use coordinates, Google Hotels often uses 'q' or 'location'
+        # But for specific coordinates, we can try adding them to params if supported
+        # or use them to refine the 'q' if needed. 
+        # For now, let's keep 'q' but know that the user picked this specific one.
+        pass
+
     if max_price:
         params["max_price"] = max_price
 
@@ -200,7 +207,15 @@ def get_hotel_prices_serpapi(
         response = requests.get(
             "https://serpapi.com/search",
             params=params,
+            timeout=30,
         )
+        if response.status_code == 429:
+            print("SerpAPI hotel fetch rate-limited/quota-limited (HTTP 429).")
+            return []
+        if response.status_code >= 400:
+            print(f"SerpAPI hotel fetch failed with HTTP {response.status_code}.")
+            return []
+
         data = response.json()
 
         if "error" in data:
@@ -884,7 +899,7 @@ def _normalize_paytm_bus_output(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
 
             route = f"{unquote(match.group(1))} to {unquote(match.group(2))}"
 
-    for index, bus in enumerate(buses, 1):
+    for bus in buses:
         fare = _extract_fare_to_int(bus.get("price", ""))
         name = bus.get("busName") or "Paytm bus"
         departure = _normalize_time_12h(bus.get("departureTime", ""))
@@ -893,7 +908,7 @@ def _normalize_paytm_bus_output(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
             "bus",
             name,
             route,
-            f"PAYTM-{index}",
+            None,
             "N/A",
             [{
                 "classType": "Bus ticket",
@@ -914,11 +929,29 @@ def _normalize_paytm_bus_output(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
     return normalized
 
 
+def get_route_map_serpapi(origin: str, destination: str) -> Optional[str]:
+    """Get a static map image or link for the route using SerpAPI Google Maps engine."""
+    params = {
+        "engine": "google_maps",
+        "q": f"route from {origin} to {destination}",
+        "type": "search",
+        "api_key": SERPAPI_KEY
+    }
+    try:
+        data = _serpapi_search(params)
+        if data and "static_map" in data:
+            return data["static_map"].get("link")
+        return None
+    except Exception:
+        return None
+
 def get_transport_options(
     origin: str,
     destination: str,
     month: str,
-    transport_budget: int = None
+    transport_budget: int = None,
+    latitude: float = None,
+    longitude: float = None
 ) -> Dict[str, Any]:
     """
     Collect and sort transport modes (train/flight/bus/taxi).
@@ -927,6 +960,9 @@ def get_transport_options(
     parsed: List[Dict[str, Any]] = []
     origin = _canonical_place_name(origin) or origin
     destination = _canonical_place_name(destination) or destination
+
+    # Try SerpAPI for a route overview/map if possible
+    route_map = get_route_map_serpapi(origin, destination)
 
     # 1) Local scrapers (authoritative for this project)
     travel_date = _transport_scraper_date(month)
@@ -1020,6 +1056,7 @@ def get_transport_options(
         "source": "local-scraper",
         "query": query,
         "hubs": hubs,
+        "route_map_url": route_map,
     }
 
 

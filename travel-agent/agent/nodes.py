@@ -1,6 +1,7 @@
 import os
 import re
 import json
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from groq import Groq
 from dotenv import load_dotenv
@@ -18,15 +19,45 @@ from agent.tools import (
     _transport_type_priority,
 )
 
-load_dotenv()
+TRAVEL_AGENT_DIR = Path(__file__).resolve().parents[1]
+REPO_DIR = TRAVEL_AGENT_DIR.parent
+REPO_ENV = REPO_DIR / ".env"
+TRAVEL_AGENT_ENV = TRAVEL_AGENT_DIR / ".env"
+
+# Load both supported env locations. The travel-agent .env wins when both exist.
+load_dotenv(REPO_ENV)
+load_dotenv(TRAVEL_AGENT_ENV, override=True)
 
 # ── Initialize Groq ───────────────────────────────────────
-groq_api_key = os.getenv("GROQ_API") or os.getenv("GROQ_API_KEY")
-if not groq_api_key:
-    print("⚠️  Missing Groq API key. Set GROQ_API or GROQ_API_KEY in your environment.")
-    client = None
-else:
-    client = Groq(api_key=groq_api_key)
+client: Optional[Groq] = None
+_loaded_groq_api_key: Optional[str] = None
+
+
+def _current_groq_api_key() -> Optional[str]:
+    return os.getenv("GROQ_API") or os.getenv("GROQ_API_KEY")
+
+
+def _get_groq_client() -> Optional[Groq]:
+    global client, _loaded_groq_api_key
+
+    # Re-read env files so restarting the API is enough after editing .env.
+    load_dotenv(REPO_ENV)
+    load_dotenv(TRAVEL_AGENT_ENV, override=True)
+
+    groq_api_key = _current_groq_api_key()
+    if not groq_api_key:
+        print("⚠️  Missing Groq API key. Set GROQ_API or GROQ_API_KEY in travel-agent/.env.")
+        client = None
+        _loaded_groq_api_key = None
+        return None
+
+    if client is None or _loaded_groq_api_key != groq_api_key:
+        client = Groq(api_key=groq_api_key)
+        _loaded_groq_api_key = groq_api_key
+    return client
+
+
+_get_groq_client()
 
 # ── API Counter ───────────────────────────────────────────
 _groq_call_count = 0
@@ -62,7 +93,10 @@ def _clean_place_candidate(value: str) -> Optional[str]:
 
 
 # ── Load System Prompt ────────────────────────────────────
-with open("prompts/system_prompt.txt", "r", encoding="utf-8") as f:
+PROMPT_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "prompts", "system_prompt.txt")
+)
+with open(PROMPT_PATH, "r", encoding="utf-8") as f:
     system_prompt = f.read()
 
 # ── Helper — LLM call ─────────────────────────────────────
@@ -71,7 +105,8 @@ def llm_call(prompt: str,
              json_mode: bool = False) -> str:
     global _groq_call_count
 
-    if client is None:
+    groq_client = _get_groq_client()
+    if groq_client is None:
         print("⚠️  Groq client unavailable. Skipping LLM call.")
         return "{}" if json_mode else "Groq unavailable."
 
@@ -93,7 +128,7 @@ def llm_call(prompt: str,
         kwargs["response_format"] = {"type": "json_object"}
 
     try:
-        completion = client.chat.completions.create(**kwargs)
+        completion = groq_client.chat.completions.create(**kwargs)
         return completion.choices[0].message.content
     except Exception as e:
         print(f"Groq request failed: {e}")
@@ -249,9 +284,11 @@ def research_node(state: AgentState) -> AgentState:
     month       = state.get("travel_month", "current month")
     nights      = state.get("nights", 3)
     num_people  = state.get("num_people", 2)
+    lat         = state.get("destination_latitude")
+    lng         = state.get("destination_longitude")
 
     # 1. Weather — Open-Meteo (free, no key, no Tavily)
-    state["weather_data"] = get_weather_data(destination)
+    state["weather_data"] = get_weather_data(destination, latitude=lat, longitude=lng)
 
     # 2. Hotel price trends — SerpAPI Google Hotels (real prices!)
     serpapi_hotels = get_hotel_prices_serpapi(destination, month, nights, num_people)
@@ -351,18 +388,29 @@ def search_node(state: AgentState) -> AgentState:
         state.get("travel_month", ""),
         nights=nights,
         adults=num_people,
+        max_price=hotel_budget,
+        latitude=state.get("destination_latitude"),
+        longitude=state.get("destination_longitude"),
     )
     state["hotels"] = serpapi_hotels if serpapi_hotels else []
+    if not state["hotels"]:
+        state.setdefault("warnings", []).append(
+            "No hotels returned from SerpAPI. The key may be rate-limited/quota-limited, "
+            "or Google Hotels returned no properties for the selected destination/date."
+        )
 
     # ── Transport — structured mode-wise aggregation
     transport_data = get_transport_options(
         state.get("origin", "Delhi"),
         state["destination"],
         state.get("travel_month", ""),
-        state.get("transport_budget")
+        transport_budget=state.get("transport_budget"),
+        latitude=state.get("destination_latitude"),
+        longitude=state.get("destination_longitude"),
     )
     state["transport_options"] = transport_data.get("options", [])
     state["transport_by_mode"] = transport_data.get("by_mode", {})
+    state["route_map_url"] = transport_data.get("route_map_url")
 
     # If no direct transport options, try alternative routes
     missing_modes = [mode for mode in ["train", "flight", "bus"]
@@ -718,7 +766,10 @@ Do not plan outdoor activities after sunset time.
         state["itinerary"] = result
     except Exception as e:
         print(f"Itinerary error: {e}")
-        state["itinerary"] = _build_fallback_itinerary(state)
+        raise RuntimeError(
+            "Groq itinerary generation failed. Check GROQ_API in travel-agent/.env "
+            "and restart the travel-agent API."
+        ) from e
 
     state["budget_breakdown"] = {
         "Hotel"      : state["hotel_budget"],
