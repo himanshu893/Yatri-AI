@@ -1,25 +1,261 @@
+const fs = require("node:fs");
+const path = require("node:path");
+const https = require("node:https");
 const readline = require("node:readline/promises");
 const { stdin: input, stdout: output } = require("node:process");
 
 function clean(value) {
-  return String(value || "").trim();
+  return String(value || "").replace(/\s+/g, " ").trim();
 }
 
-function normalizeCity(value) {
-  return clean(value).toLowerCase();
+function titleCase(value) {
+  return clean(value)
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
-function toNumberFare(value) {
-  const digits = clean(value).replace(/[^\d]/g, "");
+const CITY_ALIASES = new Map([
+  ["mumabi", "Mumbai"],
+  ["bombay", "Mumbai"],
+  ["new delhi", "Delhi"],
+  ["delhi", "Delhi"],
+  ["bengaluru", "Bengaluru"],
+  ["bangalore", "Bengaluru"],
+]);
+
+const AIRPORT_CODES = new Map([
+  ["mumbai", "BOM"],
+  ["nagpur", "NAG"],
+  ["delhi", "DEL"],
+  ["bengaluru", "BLR"],
+  ["bangalore", "BLR"],
+  ["hyderabad", "HYD"],
+  ["chennai", "MAA"],
+  ["kolkata", "CCU"],
+  ["pune", "PNQ"],
+  ["goa", "GOI"],
+  ["jaipur", "JAI"],
+  ["ahmedabad", "AMD"],
+  ["kochi", "COK"],
+  ["indore", "IDR"],
+  ["guwahati", "GAU"],
+  ["patna", "PAT"],
+  ["srinagar", "SXR"],
+  ["chandigarh", "IXC"],
+  ["surat", "STV"],
+  ["varanasi", "VNS"],
+]);
+
+function loadAirportCodesFromFile() {
+  const filePath = path.join(__dirname, "923042218-Airport-Codes.txt");
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  const text = fs.readFileSync(filePath, "utf8");
+  const matches = text.matchAll(/([A-Za-z][A-Za-z ()-]{2,}?)\s+([A-Z]{3})\b/g);
+  for (const match of matches) {
+    const city = clean(match[1].replace(/\([^)]*\)/g, " "));
+    if (city && !/Airport|International|Domestic|Code|Name/i.test(city)) {
+      AIRPORT_CODES.set(city.toLowerCase(), match[2]);
+    }
+  }
+}
+
+function canonicalCity(value) {
+  const cleaned = clean(value)
+    .replace(/\b(?:airport|international|domestic|terminal|railway station|bus terminal)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return CITY_ALIASES.get(cleaned.toLowerCase()) || titleCase(cleaned);
+}
+
+function slugifyCity(value) {
+  return canonicalCity(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function airportCodeForCity(city) {
+  return AIRPORT_CODES.get(canonicalCity(city).toLowerCase()) || null;
+}
+
+function buildSearchUrl(fromCity, toCity) {
+  const fromCode = airportCodeForCity(fromCity);
+  const toCode = airportCodeForCity(toCity);
+  if (!fromCode || !toCode) {
+    return null;
+  }
+  return `https://www.ixigo.com/cheap-flights/${slugifyCity(fromCity)}-${slugifyCity(toCity)}-${fromCode.toLowerCase()}-${toCode.toLowerCase()}`;
+}
+
+function fetchText(url, redirectCount = 0) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(
+      url,
+      {
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "Accept-Language": "en-IN,en;q=0.9",
+          "User-Agent": "Mozilla/5.0 YatriAI/1.0",
+        },
+      },
+      (response) => {
+        const statusCode = response.statusCode || 0;
+        const location = response.headers.location;
+
+        if ([301, 302, 303, 307, 308].includes(statusCode) && location) {
+          response.resume();
+          if (redirectCount >= 5) {
+            reject(new Error("Too many redirects while fetching ixigo."));
+            return;
+          }
+          fetchText(new URL(location, url).toString(), redirectCount + 1).then(resolve, reject);
+          return;
+        }
+
+        if (statusCode >= 400) {
+          response.resume();
+          reject(new Error(`ixigo returned HTTP ${statusCode}.`));
+          return;
+        }
+
+        response.setEncoding("utf8");
+        let body = "";
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => resolve(body));
+      }
+    );
+
+    request.setTimeout(45000, () => {
+      request.destroy(new Error("Timed out while fetching ixigo."));
+    });
+    request.on("error", reject);
+  });
+}
+
+function decodeHtml(value) {
+  const named = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: " " };
+  return String(value || "")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(parseInt(code, 10)))
+    .replace(/&([a-z]+);/gi, (_, name) => named[name.toLowerCase()] || `&${name};`);
+}
+
+function extractJsonLdBlocks(html) {
+  const blocks = [];
+  const regex = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const raw = decodeHtml(match[1]).trim();
+    try {
+      blocks.push(JSON.parse(raw));
+    } catch {
+      // Ignore malformed non-flight schema blocks.
+    }
+  }
+  return blocks;
+}
+
+function flattenJsonLd(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap(flattenJsonLd);
+  }
+  if (value && typeof value === "object") {
+    const graph = Array.isArray(value["@graph"]) ? value["@graph"].flatMap(flattenJsonLd) : [];
+    return [value, ...graph];
+  }
+  return [];
+}
+
+function isoDurationToText(value) {
+  const match = clean(value).match(/^PT(?:(\d+)H)?(?:(\d+)M)?$/i);
+  if (!match) {
+    return clean(value) || "N/A";
+  }
+  const hours = Number(match[1] || 0);
+  const minutes = Number(match[2] || 0);
+  const parts = [];
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  return parts.join(" ") || "N/A";
+}
+
+function normalizeTime(value) {
+  const match = clean(value).match(/^(\d{1,2}):([0-5]\d)\s*(AM|PM)$/i);
+  if (!match) {
+    return clean(value).replace(/\s+/g, " ") || "N/A";
+  }
+
+  let hours = Number(match[1]);
+  const minutes = match[2];
+  const suffix = match[3].toUpperCase();
+  if (suffix === "PM" && hours < 12) {
+    hours += 12;
+  } else if (suffix === "AM" && hours === 12) {
+    hours = 0;
+  }
+  return `${String(hours).padStart(2, "0")}:${minutes}`;
+}
+
+function fareFromOffer(offer) {
+  const price = offer && typeof offer === "object" ? offer.price : null;
+  const digits = clean(price).replace(/[^\d]/g, "");
   return digits ? Number(digits) : null;
 }
 
-function sortByFareAndDuration(options) {
-  return [...options].sort((a, b) => {
-    const aFare = a.fare == null ? Number.MAX_SAFE_INTEGER : a.fare;
-    const bFare = b.fare == null ? Number.MAX_SAFE_INTEGER : b.fare;
-    if (aFare !== bFare) return aFare - bFare;
-    return clean(a.duration).localeCompare(clean(b.duration));
+function parseFlightSchemas(html, fromCity, toCity) {
+  const sourceUrl = buildSearchUrl(fromCity, toCity);
+  const allSchemas = extractJsonLdBlocks(html).flatMap(flattenJsonLd);
+  const flights = [];
+  const seen = new Set();
+
+  for (const schema of allSchemas) {
+    const type = schema["@type"];
+    const isFlight = type === "Flight" || (Array.isArray(type) && type.includes("Flight"));
+    if (!isFlight || !schema.flightNumber) {
+      continue;
+    }
+
+    const code = clean(schema.flightNumber).toUpperCase();
+    const fare = fareFromOffer(schema.offers);
+    const airline = clean(schema.name).replace(new RegExp(`\\s+${code}\\b.*$`, "i"), "") || "Flight";
+    const fromCode = schema.departureAirport?.iataCode || airportCodeForCity(fromCity) || "";
+    const toCode = schema.arrivalAirport?.iataCode || airportCodeForCity(toCity) || "";
+    const key = [code, normalizeTime(schema.departureTime), normalizeTime(schema.arrivalTime), fare || ""].join("|");
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+
+    flights.push({
+      type: "flight",
+      name: `${airline} ${code}`,
+      route: `${canonicalCity(fromCity)} to ${canonicalCity(toCity)}`,
+      code,
+      duration: isoDurationToText(schema.estimatedFlightDuration),
+      fare,
+      classes: [{
+        classType: "Economy",
+        fare: fare ? `\u20b9${fare}` : "N/A",
+        status: schema.offers?.availability ? "Available" : "Check airline portal",
+      }],
+      departure: normalizeTime(schema.departureTime),
+      arrival: normalizeTime(schema.arrivalTime),
+      description: [fromCode && toCode ? `${fromCode} to ${toCode}` : "", sourceUrl ? "Source: ixigo" : ""].filter(Boolean).join(" | "),
+    });
+  }
+
+  return flights.sort((a, b) => {
+    const fareDiff = (a.fare ?? Number.MAX_SAFE_INTEGER) - (b.fare ?? Number.MAX_SAFE_INTEGER);
+    if (fareDiff) return fareDiff;
+    return clean(a.departure).localeCompare(clean(b.departure));
   });
 }
 
@@ -34,11 +270,7 @@ async function askUserInputs() {
       throw new Error("Origin, destination, and date are required.");
     }
 
-    return {
-      from: clean(from),
-      to: clean(to),
-      date: clean(travelDate),
-    };
+    return { from: clean(from), to: clean(to), date: clean(travelDate) };
   } finally {
     rl.close();
   }
@@ -55,115 +287,59 @@ async function readLinesFromStdin() {
     data += chunk;
   }
 
-  const lines = data.split(/\r?\n/).map(l => clean(l)).filter(l => l);
+  const lines = data.split(/\r?\n/).map((line) => clean(line)).filter(Boolean);
   if (lines.length < 3) {
     return null;
   }
 
-  return {
-    from: lines[0],
-    to: lines[1],
-    date: lines[2],
-  };
-}
-
-function getFlightSeedData() {
-  return [
-    {
-      flightCode: "AI101",
-      flightName: "Air India AI101",
-      from: "Mumbai",
-      to: "Delhi",
-      duration: "2 hours",
-      classes: [{ classType: "Economy", fare: "₹5000", status: "Available" }],
-    },
-    {
-      flightCode: "AI103",
-      flightName: "Air India AI103",
-      from: "Mumbai",
-      to: "Chandigarh",
-      duration: "2.5 hours",
-      classes: [{ classType: "Economy", fare: "₹6000", status: "Available" }],
-    },
-    {
-      flightCode: "6E221",
-      flightName: "IndiGo 6E221",
-      from: "Mumbai",
-      to: "Delhi",
-      duration: "2 hours 10 minutes",
-      classes: [{ classType: "Economy", fare: "₹5400", status: "Available" }],
-    },
-    {
-      flightCode: "UK955",
-      flightName: "Vistara UK955",
-      from: "Delhi",
-      to: "Chandigarh",
-      duration: "1.2 hours",
-      classes: [{ classType: "Economy", fare: "₹3800", status: "Available" }],
-    },
-  ];
-}
-
-function createFallbackOption(from, to) {
-  return {
-    flightCode: "AI900",
-    flightName: `${from} to ${to} Express`,
-    from,
-    to,
-    duration: "N/A",
-    classes: [{ classType: "Economy", fare: "N/A", status: "Check airline portal" }],
-    fallback: true,
-  };
-}
-
-function mapToTransportOption(flight) {
-  const fares = (flight.classes || []).map((x) => toNumberFare(x.fare)).filter((x) => x != null);
-  return {
-    type: "flight",
-    name: flight.flightName,
-    route: `${flight.from} to ${flight.to}`,
-    code: flight.flightCode,
-    duration: flight.duration,
-    fare: fares.length ? Math.min(...fares) : null,
-    classes: flight.classes || [],
-    fallback: Boolean(flight.fallback),
-  };
+  return { from: lines[0], to: lines[1], date: lines[2] };
 }
 
 async function run() {
+  loadAirportCodesFromFile();
+
   let inputData;
   try {
-    // Try to read from piped stdin first
     inputData = await readLinesFromStdin();
-  } catch (e) {
-    // Fall back to interactive input
+    if (!inputData) {
+      inputData = await askUserInputs();
+    }
+  } catch {
     inputData = await askUserInputs();
   }
-  
-  const fromKey = normalizeCity(inputData.from);
-  const toKey = normalizeCity(inputData.to);
 
-  const flights = getFlightSeedData()
-    .filter((f) => normalizeCity(f.from) === fromKey && normalizeCity(f.to) === toKey);
+  const searchUrl = buildSearchUrl(inputData.from, inputData.to);
+  if (!searchUrl) {
+    console.log(JSON.stringify({
+      mode: "flight",
+      source: "ixigo-static-page",
+      fallback: true,
+      search: inputData,
+      totalOptions: 0,
+      options: [],
+      warning: "No airport code found for this route.",
+    }, null, 2));
+    return;
+  }
 
-  const selected = flights.length ? flights : [createFallbackOption(inputData.from, inputData.to)];
-  const options = sortByFareAndDuration(selected.map(mapToTransportOption));
+  const html = await fetchText(searchUrl);
+  const options = parseFlightSchemas(html, inputData.from, inputData.to);
 
-  const isFallback = options.length === 1 && options[0].fallback === true;
-  console.log(
-    JSON.stringify(
-      {
-        mode: "flight",
-        source: "seed-data",
-        fallback: isFallback,
-        search: inputData,
-        totalOptions: options.length,
-        options,
-      },
-      null,
-      2
-    )
-  );
+  console.log(JSON.stringify({
+    mode: "flight",
+    source: "ixigo-static-page",
+    fallback: options.length === 0,
+    searchUrl,
+    search: {
+      ...inputData,
+      fromResolved: canonicalCity(inputData.from),
+      toResolved: canonicalCity(inputData.to),
+      fromAirport: airportCodeForCity(inputData.from),
+      toAirport: airportCodeForCity(inputData.to),
+    },
+    totalOptions: options.length,
+    options,
+  }, null, 2));
 }
 
 run().catch((error) => {
