@@ -1,0 +1,259 @@
+✈️List of Airports in India with IATA Codes
+Major International & Domestic Airports
+
+Airport Name            City        IATA
+                                    Code
+
+
+
+Indira Gandhi
+International Airport   Delhi       DEL
+
+
+
+Chhatrapati Shivaji
+Maharaj International
+Airport                 Mumbai      BOM
+
+
+
+Kempegowda
+International Airport   Bengaluru   BLR
+
+
+
+Rajiv Gandhi
+International Airport   Hyderabad   HYD
+
+
+
+Chennai International
+Airport                 Chennai     MAA
+
+
+
+Netaji Subhas Chandra
+Bose International
+Airport                 Kolkata     CCU
+
+
+
+Sardar Vallabhbhai
+Patel International
+Airport                 Ahmedabad   AMD
+
+
+
+Cochin International    Kochi       COK
+Airport Name             City               IATA
+                                            Code
+
+
+
+
+Airport
+
+
+
+Goa International
+Airport (Dabolim)        Goa                GOI
+
+
+
+Jaipur International
+Airport                  Jaipur             JAI
+
+
+
+Pune International
+Airport                  Pune               PNQ
+
+
+
+Sri Guru Ram Dass Jee
+International Airport    Amritsar           ATQ
+
+
+
+Calicut International
+Airport                  Kozhikode          CCJ
+
+
+
+Trivandrum               Thiruvananthapur
+International Airport    am                 TRV
+
+
+
+Srinagar International
+Airport                  Srinagar           SXR
+
+
+
+Visakhapatnam
+International Airport    Visakhapatnam      VTZ
+
+
+
+Madurai International    Madurai            IXM
+Airport Name             City          IATA
+                                       Code
+
+
+
+
+Airport
+
+
+
+Mangalore
+International Airport    Mangalore     IXE
+
+
+
+Coimbatore
+International Airport    Coimbatore    CJB
+
+
+
+Biju Patnaik
+International Airport    Bhubaneswar   BBI
+
+
+
+Bagdogra International   Siliguri
+Airport                  (Bagdogra)    IXB
+
+
+
+Lal Bahadur Shastri
+International Airport    Varanasi      VNS
+
+
+
+Devi Ahilyabai Holkar
+Airport                  Indore        IDR
+
+
+
+Lokpriya Gopinath
+Bordoloi International
+Airport                  Guwahati      GAU
+
+
+
+Jay Prakash Narayan
+International Airport    Patna         PAT
+Airport Name             City                IATA
+                                             Code
+
+
+
+Dr. Babasaheb
+Ambedkar International
+Airport                  Nagpur              NAG
+
+
+
+Sheikhul Aalam
+International Airport    Srinagar            SXR
+
+
+
+Imphal International
+Airport                  Imphal              IMF
+
+
+
+Chandigarh
+International Airport    Chandigarh          IXC
+
+
+
+Surat International
+Airport                  Surat               STV
+
+
+
+Tiruchirappalli
+International Airport    Tiruchirappalli     TRZ
+
+
+
+Other Important Domestic Airports
+
+Airport Name                City           IATA
+                                           Code
+
+
+
+Veer Savarkar
+International Airport       Port Blair     IXZ
+
+
+
+Kadapa Airport              Kadapa         CDP
+Airport Name           City         IATA
+                                    Code
+
+
+
+Vijayawada Airport     Vijayawada   VGA
+
+
+
+                       Rajahmund
+Rajahmundry Airport    ry           RJA
+
+
+
+Pasighat Airport       Pasighat     IXT
+
+
+
+Agatti Airport         Agatti       AGX
+
+
+
+Birsa Munda Airport    Ranchi       IXR
+
+
+
+Dibrugarh Airport      Dibrugarh    DIB
+
+
+
+Kullu-Manali Airport   Kullu        KUU
+
+
+
+Jorhat Airport         Jorhat       JRH
+
+
+
+Bhuj Airport           Bhuj         BHJ
+
+
+
+Vadodara Airport       Vadodara     BDQ
+
+
+
+Mysore Airport         Mysore       MYQ
+
+
+
+Shimla Airport         Shimla       SLV
+Airport Name         City        IATA
+                                 Code
+
+
+
+
+Khajuraho Airport    Khajuraho   HJR
+
+
+
+                     Aurangaba
+Aurangabad Airport   d           IXU
+

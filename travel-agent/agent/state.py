@@ -17,6 +17,9 @@ class TransportOption(TypedDict):  # add this entire class
     name: str
     fare: int
     duration: str
+    route: str
+    code: str
+    classes: List[Dict[str, str]]
 
 class AgentState(TypedDict):
     
@@ -43,6 +46,7 @@ class AgentState(TypedDict):
     # ── Search results ─────────────────────
     hotels: List[Hotel]
     transport_options: List[TransportOption]  # add — you had this missing
+    transport_by_mode: Optional[Dict[str, List[TransportOption]]]
     places_to_visit: Optional[List[str]]      # add — recommendations
 
     # ── Replanning ─────────────────────────

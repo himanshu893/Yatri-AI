@@ -26,6 +26,7 @@ initial_state = {
     # Search
     "hotels":           [],
     "transport_options":[],
+    "transport_by_mode": {},
     "places_to_visit":  [],
 
     # Replanning
@@ -79,8 +80,34 @@ for h in result.get("hotels", []):
     print(f"  - {h}")
 
 print("\n🚂 TRANSPORT OPTIONS:")
-for t in result.get("transport_options", []):
-    print(f"  - {t}")
+transport_by_mode = result.get("transport_by_mode") or {}
+mode_meta = [
+    ("train", "🚂", "TRAIN"),
+    ("flight", "✈️", "FLIGHT"),
+    ("bus", "🚌", "BUS"),
+    ("taxi", "🔹", "TAXI"),
+]
+
+for mode_key, mode_emoji, mode_title in mode_meta:
+    entries = transport_by_mode.get(mode_key, [])
+    if not entries:
+        continue
+
+    print(f"\n  {mode_emoji} {mode_title} ({len(entries)} options)")
+    print("  " + "─" * 50)
+    for option in entries:
+        route = option.get("route", option.get("name", "Unknown route"))
+        code = option.get("code", "N/A")
+        fare = option.get("fare")
+        fare_text = f"₹{fare}" if fare is not None else "N/A"
+        duration = option.get("duration", "N/A")
+        print(f"    {route} [{code}]")
+        print(f"      💵 Fare: {fare_text}  🕐 {duration}")
+        for cls in option.get("classes", []):
+            print(
+                f"        └─ {cls.get('classType', 'Class')}: "
+                f"{cls.get('fare', 'N/A')} | {cls.get('status', 'N/A')}"
+            )
 
 print("\n⚠️  WARNINGS:")
 for w in result.get("warnings", []):

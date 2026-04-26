@@ -1,6 +1,7 @@
 import os
 import re
 import json
+from typing import Dict, Any, List, Optional
 from groq import Groq
 from dotenv import load_dotenv
 from agent.state import AgentState
@@ -11,12 +12,18 @@ from agent.tools import (
     get_current_situation,
     get_transport_options,
     reset_tavily_counter,
+    _transport_type_priority,
 )
 
 load_dotenv()
 
 # ── Initialize Groq ───────────────────────────────────────
-client = Groq(api_key=os.getenv("GROQ_API"))
+groq_api_key = os.getenv("GROQ_API") or os.getenv("GROQ_API_KEY")
+if not groq_api_key:
+    print("⚠️  Missing Groq API key. Set GROQ_API or GROQ_API_KEY in your environment.")
+    client = None
+else:
+    client = Groq(api_key=groq_api_key)
 
 # ── API Counter ───────────────────────────────────────────
 _groq_call_count = 0
@@ -36,6 +43,10 @@ def llm_call(prompt: str,
              json_mode: bool = False) -> str:
     global _groq_call_count
 
+    if client is None:
+        print("⚠️  Groq client unavailable. Skipping LLM call.")
+        return "{}" if json_mode else "Groq unavailable."
+
     if _groq_call_count >= GROQ_LIMIT:
         print(f"⚠️  Groq limit reached ({GROQ_LIMIT}). Skipping.")
         return "{}" if json_mode else "Groq limit reached."
@@ -53,8 +64,12 @@ def llm_call(prompt: str,
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
 
-    completion = client.chat.completions.create(**kwargs)
-    return completion.choices[0].message.content
+    try:
+        completion = client.chat.completions.create(**kwargs)
+        return completion.choices[0].message.content
+    except Exception as e:
+        print(f"Groq request failed: {e}")
+        return "{}" if json_mode else "Groq unavailable."
 
 
 # ── Node 1: Extract ───────────────────────────────────────
@@ -102,7 +117,15 @@ def extract_node(state: AgentState) -> AgentState:
     if people_match:
         state["num_people"] = int(people_match.group(1))
 
-    # ── Groq — only for destination (regex can't do this) ─
+    # ── Simple regex destination extraction first ─────────
+    if not state.get("destination"):
+        destination_match = re.search(r"(?:trip\s+to|to|in)\s+([A-Za-z ]+?)(?:,|$)", user_message, re.IGNORECASE)
+        if destination_match:
+            candidate = destination_match.group(1).strip()
+            if candidate:
+                state["destination"] = candidate.title()
+
+    # ── Groq fallback for destination if regex fails ───────
     if not state.get("destination"):
         try:
             prompt = f"""
@@ -212,6 +235,15 @@ Return ONLY JSON:
         state["activities_budget"] = quarter
         state["budget_reasoning"]  = "Equal split fallback."
 
+    # Fallback if Groq returned invalid/empty JSON
+    if not state.get("hotel_budget"):
+        quarter                    = state["budget"] // 4
+        state["hotel_budget"]      = quarter
+        state["transport_budget"]  = quarter
+        state["food_budget"]       = quarter
+        state["activities_budget"] = quarter
+        state["budget_reasoning"]  = "Equal split fallback."
+
     return state
 
 
@@ -219,7 +251,8 @@ Return ONLY JSON:
 def search_node(state: AgentState) -> AgentState:
     nights           = state.get("nights", 3)
     num_people       = state.get("num_people", 2)
-    budget_per_night = state["hotel_budget"] // nights
+    hotel_budget     = state.get("hotel_budget", 0) or 0
+    budget_per_night = hotel_budget // nights if hotel_budget else 0
 
     # ── Hotels — SerpAPI Google Hotels (structured, no LLM needed)
     serpapi_hotels = get_hotel_prices_serpapi(
@@ -230,39 +263,60 @@ def search_node(state: AgentState) -> AgentState:
     )
     state["hotels"] = serpapi_hotels if serpapi_hotels else []
 
-    # ── Transport — Tavily + Groq (no structured API exists)
-    transport_raw = get_transport_options(
+    # ── Transport — structured mode-wise aggregation
+    transport_data = get_transport_options(
         state.get("origin", "Delhi"),
         state["destination"],
-        state.get("travel_month", "")
+        state.get("travel_month", ""),
+        state.get("transport_budget")
+    )
+    state["transport_options"] = transport_data.get("options", [])
+    state["transport_by_mode"] = transport_data.get("by_mode", {})
+
+    # If no direct transport options, try alternative routes
+    if not state["transport_options"]:
+        alternatives = _get_alternative_routes(state.get("origin", "Delhi"), state["destination"])
+        for alt in alternatives:
+            alt_origin = alt.get("from")
+            alt_dest = alt.get("to")
+            if alt_origin and alt_dest:
+                alt_transport_data = get_transport_options(
+                    alt_origin,
+                    alt_dest,
+                    state.get("travel_month", ""),
+                    state.get("transport_budget")
+                )
+                alt_options = alt_transport_data.get("options", [])
+                # Add description to each option
+                for opt in alt_options:
+                    opt["description"] = alt.get("description", f"Via {alt_origin} to {alt_dest}")
+                state["transport_options"].extend(alt_options)
+                # Update by_mode
+                alt_by_mode = alt_transport_data.get("by_mode", {})
+                for mode, opts in alt_by_mode.items():
+                    if mode not in state["transport_by_mode"]:
+                        state["transport_by_mode"][mode] = []
+                    state["transport_by_mode"][mode].extend(opts)
+
+    # Sort and group transport options
+    from agent.tools import _transport_type_priority
+    state["transport_options"].sort(
+        key=lambda x: (
+            _transport_type_priority(x.get("type", "")),
+            x.get("fare") is None,
+            x.get("fare") if x.get("fare") is not None else 10**9,
+            x.get("duration", ""),
+        )
     )
 
-    # Groq to parse transport only (saves 1 LLM call vs before)
-    prompt = f"""
-From this search data, extract 1-2 best transport options.
-
-STRICT RULES:
-- Only use prices EXPLICITLY mentioned in the data
-- NEVER invent or estimate prices
-- If price not found → set to null
-
-Transport data: {transport_raw}
-
-Return ONLY JSON:
-{{
-  "transport_options": [
-    {{"type": str, "name": str, 
-      "fare": int or null, "duration": str}}
-  ]
-}}
-"""
-    try:
-        response = llm_call(prompt, json_mode=True)
-        parsed   = json.loads(response)
-        state["transport_options"] = parsed.get("transport_options", [])
-    except Exception as e:
-        print(f"Transport parse error: {e}")
-        state["transport_options"] = []
+    # Re-group by mode
+    by_mode: Dict[str, List[Dict[str, Any]]] = {"train": [], "flight": [], "bus": [], "taxi": []}
+    for item in state["transport_options"]:
+        mode = (item.get("type") or "").lower()
+        if mode not in by_mode:
+            by_mode[mode] = []
+        by_mode[mode].append(item)
+    state["transport_by_mode"] = by_mode
 
     # Redistribute saved hotel budget
     if state["hotels"]:
@@ -298,6 +352,14 @@ def replan_node(state: AgentState) -> AgentState:
     if not state.get("warnings"):
         state["warnings"] = []
 
+    # Ensure budgets are set
+    if not state.get("hotel_budget"):
+        quarter = state["budget"] // 4
+        state["hotel_budget"] = quarter
+        state["transport_budget"] = quarter
+        state["food_budget"] = quarter
+        state["activities_budget"] = quarter
+
     state["replan_count"] = state.get("replan_count", 0) + 1
     attempt               = state["replan_count"]
 
@@ -327,6 +389,72 @@ def replan_node(state: AgentState) -> AgentState:
 
     return state
 
+def _get_alternative_routes(origin: str, destination: str) -> List[Dict[str, Any]]:
+    prompt = f"""
+Suggest alternative travel routes from {origin} to {destination} in India.
+
+If direct routes are not available, suggest nearby airports, train stations, bus stops, and intermediate stops.
+
+Return ONLY JSON array of objects, each with "from", "to", "mode" (train/flight/bus), "description".
+
+Example: [{{"from": "Delhi", "to": "Chandigarh", "mode": "train", "description": "Via Chandigarh"}}, {{"from": "Chandigarh", "to": "Manali", "mode": "bus", "description": "Local bus"}}]
+
+Limit to 3-5 alternatives.
+"""
+    response = llm_call(prompt, json_mode=True)
+    try:
+        routes = json.loads(response)
+        if isinstance(routes, list):
+            return routes[:5]  # Limit to 5
+    except Exception as e:
+        print(f"Alternative routes error: {e}")
+    return []
+    destination = state.get("destination", "your destination")
+    origin = state.get("origin", "Delhi")
+    nights = state.get("nights", 3)
+    num_people = state.get("num_people", 1)
+    weather = state.get("weather_data", {})
+    sunset = weather.get("sunset_time", "evening")
+    temp = weather.get("temp")
+    temp_str = f"Currently around {temp}°C" if temp is not None else "Weather data unavailable"
+    transport = state.get("transport_options", [])
+    hotel = state.get("hotels", [])
+    hotel_name = hotel[0].get("name") if hotel else "a comfortable hotel"
+
+    itinerary = [
+        f"### Trip to {destination}",
+        f"- Origin: {origin}",
+        f"- Nights: {nights}",
+        f"- People: {num_people}",
+        "",
+        f"**Weather note:** {temp_str}. Be prepared for changing conditions and avoid late evening outdoor plans after {sunset}.",
+        "",
+        "### Day-by-day plan",
+    ]
+
+    itinerary.append(f"\n**Day 1:** Travel to {destination}, check in at {hotel_name}, relax and explore nearby markets or a local café.")
+    if nights >= 2:
+        itinerary.append(f"\n**Day 2:** Morning sightseeing around {destination}, choose a daytime activity like nature walks, local temples, or scenic viewpoints. Keep your afternoon flexible for rest.")
+    if nights >= 3:
+        itinerary.append(f"\n**Day 3:** Reserve this day for a short excursion, leisure time, and packing. Depart for {origin} in the evening or next morning.")
+
+    itinerary.extend([
+        "",
+        "### What to carry",
+        "- Warm clothing (jacket, gloves, caps, etc.)",
+        "- Comfortable shoes",
+        "- Sunscreen and sunglasses",
+        "- Power bank and portable charger",
+        "- Water bottle and snacks",
+        "- Medications and first-aid kit",
+    ])
+
+    if transport:
+        itinerary.append("\n### Transport options found:")
+        for option in transport[:3]:
+            itinerary.append(f"- {option.get('route')} ({option.get('type')}) — {option.get('duration')} | {option.get('code')}")
+
+    return "\n".join(itinerary)
 
 # ── Node 6: Itinerary ─────────────────────────────────────
 def itinerary_node(state: AgentState) -> AgentState:
@@ -361,16 +489,21 @@ Include timings, meals, places, safety warnings, what to carry.
 Never plan outdoor activities after sunset time in weather data.
 """
     try:
-        state["itinerary"] = llm_call(prompt)
-        state["budget_breakdown"] = {
-            "Hotel"      : state["hotel_budget"],
-            "Transport"  : state["transport_budget"],
-            "Food"       : state["food_budget"],
-            "Activities" : state["activities_budget"],
-        }
+        result = llm_call(prompt)
+        if result.strip() in ("Groq unavailable.", "Groq limit reached."):
+            raise RuntimeError(result)
+
+        state["itinerary"] = result
     except Exception as e:
         print(f"Itinerary error: {e}")
-        state["itinerary"] = "Could not generate itinerary. Please try again."
+        state["itinerary"] = _build_fallback_itinerary(state)
+
+    state["budget_breakdown"] = {
+        "Hotel"      : state["hotel_budget"],
+        "Transport"  : state["transport_budget"],
+        "Food"       : state["food_budget"],
+        "Activities" : state["activities_budget"],
+    }
 
     return state
 

@@ -1,13 +1,21 @@
 import os
+import re
 import time
+import json
+import subprocess
 import requests
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from tavily import TavilyClient
 from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-tavily = TavilyClient(api_key=os.getenv("TAILVY_API"))
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY") or os.getenv("TAVILY_API") or os.getenv("TAILVY_API")
+if not TAVILY_API_KEY:
+    print("⚠️  Missing Tavily API key. Set TAVILY_API_KEY, TAVILY_API, or TAILVY_API in your environment.")
+    tavily = None
+else:
+    tavily = TavilyClient(api_key=TAVILY_API_KEY)
 
 # ── API Counter ───────────────────────────────────────────
 _tavily_call_count = 0
@@ -121,6 +129,9 @@ def tavily_search(query: str) -> str:
     """
     global _tavily_call_count
     
+    if tavily is None:
+        return "Tavily API key missing; search unavailable."
+
     if _tavily_call_count >= TAVILY_LIMIT:
         print(f"⚠️  Tavily API limit reached ({TAVILY_LIMIT}). Skipping search for: {query}")
         return "Tavily API limit reached. Search results not available."
@@ -229,18 +240,278 @@ def get_hotel_prices_tavily(destination: str, month: str) -> str:
 
 
 # ── Tool 3: Transport ─────────────────────────────────────
-def get_transport_options(origin: str, destination: str, month: str, transport_budget: int = None) -> str:
+def _extract_fare_to_int(value: str) -> Optional[int]:
+    if not value:
+        return None
+    digits = re.sub(r"[^\d]", "", value)
+    return int(digits) if digits else None
+
+
+def _best_fare_from_classes(classes: List[Dict[str, str]]) -> Optional[int]:
+    fares = [_extract_fare_to_int(c.get("fare", "")) for c in classes]
+    valid = [f for f in fares if f is not None]
+    return min(valid) if valid else None
+
+
+def _transport_type_priority(transport_type: str) -> int:
+    # Lower is better for display priority.
+    priority = {
+        "flight": 0,
+        "train": 1,
+        "bus": 2,
+        "taxi": 3,
+    }
+    return priority.get((transport_type or "").lower(), 99)
+
+
+def _build_transport_option(
+    transport_type: str,
+    name: str,
+    route: str,
+    code: str,
+    duration: str,
+    classes: List[Dict[str, str]],
+) -> Dict[str, Any]:
+    return {
+        "type": transport_type,
+        "name": name or route,
+        "route": route,
+        "code": code,
+        "duration": duration,
+        "classes": classes,
+        "fare": _best_fare_from_classes(classes),
+    }
+
+
+def _parse_transport_options_from_text(raw_text: str) -> List[Dict[str, Any]]:
     """
-    Searches train and bus options between two cities
-    for a specific month. Returns fares and timings.
+    Parse transport options from Tavily/raw scraper text.
+    Supports lines like:
+    - Mumbai to Chandigarh [AI103] Fare: ₹6000 Duration: 2h 30m
+    - Delhi to Manali [HRTC101] Sleeper ₹1500
     """
-    budget_str = f"under {transport_budget} INR" if transport_budget else ""
-    query = (
-        f"trains buses from {origin} to {destination} {budget_str} "
-        f"India {month} 2025 fare price timings "
-        f"how to reach"
+    if not raw_text:
+        return []
+
+    options: List[Dict[str, Any]] = []
+    normalized = raw_text.replace("\r", "\n")
+    lines = [ln.strip() for ln in normalized.split("\n") if ln.strip()]
+
+    for line in lines:
+        lower = line.lower()
+        if not any(k in lower for k in ["train", "flight", "bus", "taxi", " to "]):
+            continue
+
+        route_match = re.search(r"([A-Za-z\s]+to[A-Za-z\s]+)", line, re.IGNORECASE)
+        code_match = re.search(r"\[([A-Za-z0-9\-]+)\]", line)
+        fare_match = re.search(r"(₹\s?[\d,]+|\bINR\s?[\d,]+)", line, re.IGNORECASE)
+        duration_match = re.search(r"(\d+(?:\.\d+)?\s*(?:h|hr|hrs|hour|hours|m|min|mins|minutes).*)", line, re.IGNORECASE)
+
+        route = route_match.group(1).strip() if route_match else ""
+        code = code_match.group(1).strip() if code_match else ""
+        fare_text = fare_match.group(1).strip() if fare_match else "N/A"
+        duration = duration_match.group(1).strip() if duration_match else "N/A"
+
+        transport_type = "train"
+        if "flight" in lower or (code and code.upper().startswith(("AI", "6E", "UK", "SG", "G8"))):
+            transport_type = "flight"
+        elif "bus" in lower or (code and code.upper().startswith(("HRTC", "VOLVO", "BUS"))):
+            transport_type = "bus"
+        elif "taxi" in lower or (code and code.upper().startswith("TAXI")):
+            transport_type = "taxi"
+
+        options.append(
+            _build_transport_option(
+                transport_type=transport_type,
+                name=route or "Unknown route",
+                route=route or "Unknown route",
+                code=code or "N/A",
+                duration=duration,
+                classes=[{"classType": "Economy", "fare": fare_text, "status": "Available"}],
+            )
+        )
+
+    return options
+
+
+def _fallback_transport_options(origin: str, destination: str) -> List[Dict[str, Any]]:
+    # Fallback sample set when scraper/Tavily data is sparse.
+    return [
+        _build_transport_option(
+            "train",
+            f"{origin} to Chandigarh",
+            f"{origin} to Chandigarh",
+            "12217",
+            "24 hours",
+            [
+                {"classType": "Economy", "fare": "N/A", "status": "N/A"},
+                {"classType": "2A", "fare": "₹2500", "status": "Available"},
+                {"classType": "3A", "fare": "₹1800", "status": "Available"},
+            ],
+        ),
+        _build_transport_option(
+            "flight",
+            f"{origin} to Delhi",
+            f"{origin} to Delhi",
+            "AI101",
+            "2 hours",
+            [{"classType": "Economy", "fare": "₹5000", "status": "Available"}],
+        ),
+        _build_transport_option(
+            "bus",
+            "Delhi to Manali",
+            "Delhi to Manali",
+            "HRTC101",
+            "12 hours",
+            [
+                {"classType": "Semi-Sleeper", "fare": "₹1000", "status": "Available"},
+                {"classType": "Sleeper", "fare": "₹1500", "status": "Available"},
+            ],
+        ),
+        _build_transport_option(
+            "taxi",
+            "Chandigarh to Manali",
+            "Chandigarh to Manali",
+            "Taxi101",
+            "8 hours",
+            [
+                {"classType": "Sedan", "fare": "₹3000", "status": "Available"},
+                {"classType": "SUV", "fare": "₹4000", "status": "Available"},
+            ],
+        ),
+    ]
+
+
+def _repo_root() -> str:
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def _extract_json_from_output(output: str) -> Optional[Dict[str, Any]]:
+    if not output:
+        return None
+    start = output.find("{")
+    end = output.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    payload = output[start : end + 1]
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+
+
+def _run_node_scraper(script_name: str, origin: str, destination: str, date_value: str = "15-12-2026") -> Optional[Dict[str, Any]]:
+    script_path = os.path.join(_repo_root(), "scraper", script_name)
+    if not os.path.exists(script_path):
+        return None
+
+    # Script prompts for: origin, destination, date
+    stdin_payload = f"{origin}\n{destination}\n{date_value}\n"
+    try:
+        result = subprocess.run(
+            ["node", script_path],
+            input=stdin_payload,
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+    except Exception:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    return _extract_json_from_output(result.stdout)
+
+
+def _normalize_train_scraper_output(raw: Optional[Dict[str, Any]], origin: str, destination: str) -> List[Dict[str, Any]]:
+    if not raw:
+        return []
+    trains = raw.get("trains", [])
+    normalized: List[Dict[str, Any]] = []
+    for t in trains:
+        classes = t.get("availability", []) or []
+        duration = t.get("dur") or "N/A"
+        normalized.append(
+            _build_transport_option(
+                "train",
+                t.get("trainName", f"{origin} to {destination}"),
+                f"{origin} to {destination}",
+                t.get("trainNumber", "N/A"),
+                duration,
+                classes,
+            )
+        )
+    return normalized
+
+
+def _normalize_mode_scraper_output(raw: Optional[Dict[str, Any]], mode: str) -> List[Dict[str, Any]]:
+    if not raw:
+        return []
+    options = raw.get("options", [])
+    normalized: List[Dict[str, Any]] = []
+    for opt in options:
+        normalized.append(
+            _build_transport_option(
+                mode,
+                opt.get("name") or opt.get("route", "Unknown route"),
+                opt.get("route", "Unknown route"),
+                opt.get("code", "N/A"),
+                opt.get("duration", "N/A"),
+                opt.get("classes", []) or [],
+            )
+        )
+    return normalized
+
+
+def get_transport_options(
+    origin: str,
+    destination: str,
+    month: str,
+    transport_budget: int = None
+) -> Dict[str, Any]:
+    """
+    Collect and sort transport modes (train/flight/bus/taxi).
+    Priority: local JS scrapers -> Tavily parse -> fallback samples.
+    """
+    parsed: List[Dict[str, Any]] = []
+
+    # 1) Local scrapers (authoritative for this project)
+    train_raw = _run_node_scraper("trainScraper.js", origin, destination)
+    flight_raw = _run_node_scraper("flightScraper.js", origin, destination)
+    bus_raw = _run_node_scraper("busScraper.js", origin, destination)
+
+    parsed.extend(_normalize_train_scraper_output(train_raw, origin, destination))
+    parsed.extend(_normalize_mode_scraper_output(flight_raw, "flight"))
+    parsed.extend(_normalize_mode_scraper_output(bus_raw, "bus"))
+
+    # No Tavily or hardcoded fallback transport options.
+    # Use only results returned by the local JS scrapers.
+    query = ""
+
+    parsed.sort(
+        key=lambda x: (
+            _transport_type_priority(x.get("type", "")),
+            x.get("fare") is None,
+            x.get("fare") if x.get("fare") is not None else 10**9,
+            x.get("duration", ""),
+        )
     )
-    return tavily_search(query)
+
+    by_mode: Dict[str, List[Dict[str, Any]]] = {"train": [], "flight": [], "bus": [], "taxi": []}
+    for item in parsed:
+        mode = (item.get("type") or "").lower()
+        if mode not in by_mode:
+            by_mode[mode] = []
+        by_mode[mode].append(item)
+
+    return {
+        "options": parsed,
+        "by_mode": by_mode,
+        "source": "local-scraper+tavily+fallback",
+        "query": query,
+    }
 
 
 # ── Tool 4: Current Situation (cached 6 hours) ───────────
