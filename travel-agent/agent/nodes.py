@@ -132,13 +132,18 @@ def extract_node(state: AgentState) -> AgentState:
     if nights_match:
         state["nights"] = int(nights_match.group(1))
 
-    # Month
+    # Travel date/month
+    date_match = re.search(r"\b(\d{4}-\d{2}-\d{2}|\d{2}-\d{2}-\d{4})\b", user_message)
+    if date_match:
+        state["travel_month"] = date_match.group(1)
+
     months = ["january","february","march","april","may","june",
               "july","august","september","october","november","december"]
-    for month in months:
-        if month in msg:
-            state["travel_month"] = month.capitalize()
-            break
+    if not state.get("travel_month"):
+        for month in months:
+            if month in msg:
+                state["travel_month"] = month.capitalize()
+                break
 
     # People
     people_match = re.search(r'(\d+)\s*(?:people|person|persons|pax)', msg)

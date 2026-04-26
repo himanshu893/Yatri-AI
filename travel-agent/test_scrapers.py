@@ -3,18 +3,22 @@ import json
 
 def test_scraper(script_name, origin, destination):
     script_path = f"../scraper/{script_name}"
-    stdin_payload = f"{origin}\n{destination}\n15-12-2026\n"
+    date_value = "2026-05-15"
+    stdin_payload = f"{origin}\n{destination}\n{date_value}\n"
+    command = ["node", script_path]
+    if script_name == "busScraper.js":
+        command = ["node", script_path, origin, destination, date_value]
     
     print(f"\n🧪 Testing {script_name}")
     print(f"Input: {origin} -> {destination}")
     
     try:
         result = subprocess.run(
-            ["node", script_path],
-            input=stdin_payload,
+            command,
+            input=None if script_name == "busScraper.js" else stdin_payload,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=120,
             check=False,
         )
         
@@ -32,6 +36,8 @@ def test_scraper(script_name, origin, destination):
             print(f"Keys: {list(data.keys())}")
             if "options" in data:
                 print(f"Options count: {len(data['options'])}")
+            if "buses" in data:
+                print(f"Buses count: {len(data['buses'])}")
         else:
             print(f"❌ No JSON found in output")
             print(f"First 200 chars: {result.stdout[:200]}")

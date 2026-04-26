@@ -103,6 +103,8 @@ mode_meta = [
 for mode_key, mode_emoji, mode_title in mode_meta:
     entries = transport_by_mode.get(mode_key, [])
     if not entries:
+        print(f"\n  {mode_emoji} {mode_title} (0 options)")
+        print("    No options found from scraper.")
         continue
 
     print(f"\n  {mode_emoji} {mode_title} ({len(entries)} options)")

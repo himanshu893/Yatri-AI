@@ -663,29 +663,134 @@ def _extract_json_from_output(output: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _scraper_display_name(script_name: str) -> str:
+    names = {
+        "trainScraper.js": "train",
+        "flightScraper.js": "flight",
+        "busScraper.js": "bus",
+    }
+    return names.get(script_name, script_name)
+
+
+def _scraper_error_message(result: subprocess.CompletedProcess) -> str:
+    message = (result.stderr or result.stdout or "").strip()
+    if not message:
+        return f"exited with code {result.returncode}"
+    return message.splitlines()[0][:300]
+
+
+def _transport_scraper_date(month: str) -> str:
+    """Return a concrete future date for transport scrapers in YYYY-MM-DD."""
+    from datetime import datetime, timedelta
+
+    value = str(month or "").strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return value
+    if re.fullmatch(r"\d{2}-\d{2}-\d{4}", value):
+        dd, mm, yyyy = value.split("-")
+        return f"{yyyy}-{mm}-{dd}"
+
+    today = datetime.now()
+    month_lookup = {
+        "january": 1,
+        "february": 2,
+        "march": 3,
+        "april": 4,
+        "may": 5,
+        "june": 6,
+        "july": 7,
+        "august": 8,
+        "september": 9,
+        "october": 10,
+        "november": 11,
+        "december": 12,
+    }
+
+    lowered = value.lower()
+    month_num = next((num for name, num in month_lookup.items() if name in lowered), None)
+    if month_num is None:
+        return (today + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    year = today.year
+    candidate = datetime(year, month_num, 15)
+    if candidate.date() <= today.date():
+        candidate = datetime(year + 1, month_num, 15)
+    return candidate.strftime("%Y-%m-%d")
+
+
+def _log_scraper_result(script_name: str, raw: Dict[str, Any]) -> None:
+    mode = _scraper_display_name(script_name)
+    if mode == "train":
+        count = len(raw.get("trains", []) or [])
+    elif mode == "bus" and "buses" in raw:
+        count = len(raw.get("buses", []) or [])
+    else:
+        count = len(raw.get("options", []) or [])
+
+    fallback_note = " (fallback/no direct results)" if raw.get("fallback") else ""
+    source = raw.get("source", "local scraper")
+    print(f"[OK] {mode.title()} scraper: {count} option(s) from {source}{fallback_note}")
+
+    preview_options = raw.get("options") or raw.get("buses") or []
+    if mode in {"bus", "flight"} and preview_options:
+        for option in preview_options[:3]:
+            fare = option.get("fare") or option.get("price")
+            fare_text = f"INR {fare}" if fare is not None else "N/A"
+            time_text = " -> ".join(
+                part for part in [
+                    option.get("departure") or option.get("departureTime"),
+                    option.get("arrival") or option.get("arrivalTime"),
+                ] if part
+            ) or option.get("duration", "N/A")
+            print(
+                f"   - {option.get('name') or option.get('busName') or 'Unknown'} "
+                f"[{option.get('code', 'N/A')}] {fare_text}, {time_text}"
+            )
+
+
 def _run_node_scraper(script_name: str, origin: str, destination: str, date_value: str = "15-12-2026") -> Optional[Dict[str, Any]]:
     script_path = os.path.join(_repo_root(), "scraper", script_name)
+    mode = _scraper_display_name(script_name)
     if not os.path.exists(script_path):
+        print(f"[WARN] {mode.title()} scraper missing: {script_path}")
         return None
+
+    print(f"[INFO] Running {mode} scraper: {origin} -> {destination}")
 
     # Script prompts for: origin, destination, date
     stdin_payload = f"{origin}\n{destination}\n{date_value}\n"
+    command = ["node", script_path]
+    input_payload = stdin_payload
+    if script_name == "busScraper.js":
+        command = ["node", script_path, origin, destination, date_value]
+        input_payload = None
+
     try:
         result = subprocess.run(
-            ["node", script_path],
-            input=stdin_payload,
+            command,
+            input=input_payload,
             capture_output=True,
             text=True,
-            timeout=90,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
             check=False,
         )
-    except Exception:
+    except Exception as e:
+        print(f"[WARN] {mode.title()} scraper failed to run: {e}")
         return None
 
     if result.returncode != 0:
+        print(f"[WARN] {mode.title()} scraper failed: {_scraper_error_message(result)}")
         return None
 
-    return _extract_json_from_output(result.stdout)
+    parsed = _extract_json_from_output(result.stdout)
+    if not parsed:
+        print(f"[WARN] {mode.title()} scraper returned no parseable JSON.")
+        return None
+
+    _log_scraper_result(script_name, parsed)
+    return parsed
 
 
 def _normalize_train_scraper_output(raw: Optional[Dict[str, Any]], origin: str, destination: str) -> List[Dict[str, Any]]:
@@ -725,6 +830,9 @@ def _normalize_train_scraper_output(raw: Optional[Dict[str, Any]], origin: str, 
 def _normalize_mode_scraper_output(raw: Optional[Dict[str, Any]], mode: str) -> List[Dict[str, Any]]:
     if not raw:
         return []
+    if mode == "bus" and "buses" in raw:
+        return _normalize_paytm_bus_output(raw)
+
     options = raw.get("options", [])
     top_level_fallback = bool(raw.get("fallback"))
     normalized: List[Dict[str, Any]] = []
@@ -751,6 +859,61 @@ def _normalize_mode_scraper_output(raw: Optional[Dict[str, Any]], mode: str) -> 
     return normalized
 
 
+def _normalize_time_12h(value: str) -> str:
+    if not value:
+        return "N/A"
+    parsed = re.match(r"^\s*(\d{1,2}):(\d{2})\s*([AP]M)\s*$", str(value), re.IGNORECASE)
+    if not parsed:
+        return str(value).strip() or "N/A"
+    hour = int(parsed.group(1)) % 12
+    if parsed.group(3).upper() == "PM":
+        hour += 12
+    return f"{hour:02d}:{parsed.group(2)}"
+
+
+def _normalize_paytm_bus_output(raw: Dict[str, Any]) -> List[Dict[str, Any]]:
+    buses = raw.get("buses", []) or []
+    search_url = raw.get("searchUrl", "")
+    normalized: List[Dict[str, Any]] = []
+
+    route = "Unknown route"
+    if search_url:
+        match = re.search(r"/bus/search/([^/]+)/([^/]+)/([^/]+)/", search_url)
+        if match:
+            from urllib.parse import unquote
+
+            route = f"{unquote(match.group(1))} to {unquote(match.group(2))}"
+
+    for index, bus in enumerate(buses, 1):
+        fare = _extract_fare_to_int(bus.get("price", ""))
+        name = bus.get("busName") or "Paytm bus"
+        departure = _normalize_time_12h(bus.get("departureTime", ""))
+        arrival = _normalize_time_12h(bus.get("arrivalTime", ""))
+        transport = _build_transport_option(
+            "bus",
+            name,
+            route,
+            f"PAYTM-{index}",
+            "N/A",
+            [{
+                "classType": "Bus ticket",
+                "fare": bus.get("price", "N/A"),
+                "status": "Available on Paytm",
+            }],
+        )
+        transport["fare"] = fare
+        transport["departure"] = departure
+        transport["arrival"] = arrival
+        transport["description"] = "Source: Paytm"
+        if bus.get("arrivalDate"):
+            transport["description"] += f" | Arrival date: {bus.get('arrivalDate')}"
+        if search_url:
+            transport["description"] += f" | {search_url}"
+        normalized.append(transport)
+
+    return normalized
+
+
 def get_transport_options(
     origin: str,
     destination: str,
@@ -766,9 +929,10 @@ def get_transport_options(
     destination = _canonical_place_name(destination) or destination
 
     # 1) Local scrapers (authoritative for this project)
-    train_raw = _run_node_scraper("trainScraper.js", origin, destination)
-    flight_raw = _run_node_scraper("flightScraper.js", origin, destination)
-    bus_raw = _run_node_scraper("busScraper.js", origin, destination)
+    travel_date = _transport_scraper_date(month)
+    train_raw = _run_node_scraper("trainScraper.js", origin, destination, travel_date)
+    flight_raw = _run_node_scraper("flightScraper.js", origin, destination, travel_date)
+    bus_raw = _run_node_scraper("busScraper.js", origin, destination, travel_date)
 
     hubs = _resolve_nearby_transit_hubs(destination)
 
@@ -779,7 +943,7 @@ def get_transport_options(
     # If direct mode results are missing, attempt hub-based alternatives
     if not any(item["type"] == "train" and not item.get("fallback") for item in parsed) and hubs.get("train_station"):
         train_hub = _canonical_place_name(hubs["train_station"]) or hubs["train_station"]
-        train_hub_raw = _run_node_scraper("trainScraper.js", origin, train_hub)
+        train_hub_raw = _run_node_scraper("trainScraper.js", origin, train_hub, travel_date)
         hub_options = _normalize_train_scraper_output(train_hub_raw, origin, train_hub)
         for opt in hub_options:
             opt["description"] = f"Nearest rail hub for {destination}: {train_hub}"
@@ -795,7 +959,7 @@ def get_transport_options(
 
     if not any(item["type"] == "flight" and not item.get("fallback") for item in parsed) and hubs.get("airport"):
         airport_hub = _canonical_place_name(hubs["airport"]) or hubs["airport"]
-        flight_hub_raw = _run_node_scraper("flightScraper.js", origin, airport_hub)
+        flight_hub_raw = _run_node_scraper("flightScraper.js", origin, airport_hub, travel_date)
         hub_options = _real_options(_normalize_mode_scraper_output(flight_hub_raw, "flight"))
         for opt in hub_options:
             opt["description"] = f"Nearest airport for {destination}: {airport_hub}"
@@ -811,7 +975,7 @@ def get_transport_options(
 
     if not any(item["type"] == "bus" and not item.get("fallback") for item in parsed) and hubs.get("bus_terminal"):
         bus_hub = _canonical_place_name(hubs["bus_terminal"]) or hubs["bus_terminal"]
-        bus_hub_raw = _run_node_scraper("busScraper.js", origin, bus_hub)
+        bus_hub_raw = _run_node_scraper("busScraper.js", origin, bus_hub, travel_date)
         hub_options = _real_options(_normalize_mode_scraper_output(bus_hub_raw, "bus"))
         for opt in hub_options:
             opt["description"] = f"Nearest bus terminal for {destination}: {bus_hub}"
