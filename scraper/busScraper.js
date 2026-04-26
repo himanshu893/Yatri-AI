@@ -45,36 +45,26 @@ async function askUserInputs() {
 }
 
 async function readLinesFromStdin() {
-  return new Promise((resolve, reject) => {
-    let data = "";
-    const timeout = setTimeout(() => {
-      input.removeListener("data", onData);
-      input.removeListener("end", onEnd);
-      reject(new Error("No stdin data within 100ms"));
-    }, 100);
+  if (process.stdin.isTTY) {
+    return null;
+  }
 
-    const onData = (chunk) => {
-      data += chunk;
-    };
+  process.stdin.setEncoding("utf8");
+  let data = "";
+  for await (const chunk of input) {
+    data += chunk;
+  }
 
-    const onEnd = () => {
-      clearTimeout(timeout);
-      input.removeListener("data", onData);
-      const lines = data.split("\n").map(l => clean(l)).filter(l => l);
-      if (lines.length < 3) {
-        reject(new Error("Expected 3 lines"));
-      } else {
-        resolve({
-          from: lines[0],
-          to: lines[1],
-          date: lines[2],
-        });
-      }
-    };
+  const lines = data.split(/\r?\n/).map(l => clean(l)).filter(l => l);
+  if (lines.length < 3) {
+    return null;
+  }
 
-    input.on("data", onData);
-    input.on("end", onEnd);
-  });
+  return {
+    from: lines[0],
+    to: lines[1],
+    date: lines[2],
+  };
 }
 
 function getBusSeedData() {
@@ -117,6 +107,7 @@ function createFallbackOption(from, to) {
     to,
     duration: "N/A",
     classes: [{ classType: "Standard", fare: "N/A", status: "Check operator portal" }],
+    fallback: true,
   };
 }
 
@@ -130,6 +121,7 @@ function mapToTransportOption(bus) {
     duration: bus.duration,
     fare: fares.length ? Math.min(...fares) : null,
     classes: bus.classes || [],
+    fallback: Boolean(bus.fallback),
   };
 }
 
@@ -152,11 +144,13 @@ async function run() {
   const selected = buses.length ? buses : [createFallbackOption(inputData.from, inputData.to)];
   const options = sortByFareAndDuration(selected.map(mapToTransportOption));
 
+  const isFallback = options.length === 1 && options[0].fallback === true;
   console.log(
     JSON.stringify(
       {
         mode: "bus",
         source: "seed-data",
+        fallback: isFallback,
         search: inputData,
         totalOptions: options.length,
         options,

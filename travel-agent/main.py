@@ -1,6 +1,18 @@
 from agent.graph import app
 
-# ── Test Input ────────────────────────────────────────────
+# ── User Input ────────────────────────────────────────────
+print("Welcome to Yatri AI Travel Planner!")
+origin = input("Enter your origin city: ").strip()
+destination = input("Enter your destination: ").strip()
+budget = input("Enter your total budget (INR): ").strip()
+travel_month = input("Enter travel month (e.g., December): ").strip()
+num_people = input("Enter number of people: ").strip()
+nights = input("Enter number of nights: ").strip()
+
+# Construct user message
+user_message = f"Plan a trip from {origin} to {destination}, budget {budget}, {travel_month}, {num_people} people for {nights} nights"
+
+# ── Initial State ─────────────────────────────────────────
 initial_state = {
     # User inputs
     "destination":      None,
@@ -44,7 +56,7 @@ initial_state = {
     "chat_history": [
         {
             "role": "user",
-            "content": "Plan a trip to Manali, budget 70000, December, 2 people from mumbai"
+            "content": user_message
         }
     ],
     "extracted_entities": {},
@@ -97,12 +109,16 @@ for mode_key, mode_emoji, mode_title in mode_meta:
     print("  " + "─" * 50)
     for option in entries:
         route = option.get("route", option.get("name", "Unknown route"))
+        name = option.get("name")
         code = option.get("code", "N/A")
         fare = option.get("fare")
         fare_text = f"₹{fare}" if fare is not None else "N/A"
         duration = option.get("duration", "N/A")
-        print(f"    {route} [{code}]")
+        title = f"{name} - {route}" if name and name != route else route
+        print(f"    {title} [{code}]")
         print(f"      💵 Fare: {fare_text}  🕐 {duration}")
+        if option.get("description"):
+            print(f"      ℹ️ {option.get('description')}")
         for cls in option.get("classes", []):
             print(
                 f"        └─ {cls.get('classType', 'Class')}: "

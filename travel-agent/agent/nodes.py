@@ -11,6 +11,8 @@ from agent.tools import (
     get_hotel_prices_tavily,
     get_current_situation,
     get_transport_options,
+    get_nearest_hub_serpapi,
+    _resolve_nearby_transit_hubs,
     reset_tavily_counter,
     _transport_type_priority,
 )
@@ -32,6 +34,31 @@ GROQ_LIMIT       = 10
 def reset_groq_counter():
     global _groq_call_count
     _groq_call_count = 0
+
+
+_PLACE_ALIASES = {
+    "mumabi": "Mumbai",
+    "bombay": "Mumbai",
+    "mumbai": "Mumbai",
+    "nagpur": "Nagpur",
+    "delhi": "Delhi",
+    "new delhi": "Delhi",
+}
+
+
+def _clean_place_candidate(value: str) -> Optional[str]:
+    cleaned = re.sub(r"\s+", " ", str(value or "")).strip(" ,.")
+    cleaned = re.sub(
+        r"\b(?:budget|under|around|for|with|inr|rs|rupees|people|person|persons|pax|night|nights|day|days)\b.*$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.")
+    if not cleaned:
+        return None
+    return _PLACE_ALIASES.get(cleaned.lower(), cleaned.title())
+
 
 # ── Load System Prompt ────────────────────────────────────
 with open("prompts/system_prompt.txt", "r", encoding="utf-8") as f:
@@ -117,13 +144,38 @@ def extract_node(state: AgentState) -> AgentState:
     if people_match:
         state["num_people"] = int(people_match.group(1))
 
+    route_match = re.search(
+        r"\bfrom\s+([A-Za-z .'\-]+?)\s+to\s+([A-Za-z .'\-]+?)(?=,|\b(?:budget|under|around|for|with|inr|rs|rupees|people|person|persons|pax|night|nights|day|days|in\s+\d)\b|$)",
+        user_message,
+        re.IGNORECASE,
+    )
+    if route_match:
+        origin_candidate = _clean_place_candidate(route_match.group(1))
+        destination_candidate = _clean_place_candidate(route_match.group(2))
+        if origin_candidate:
+            state["origin"] = origin_candidate
+        if destination_candidate:
+            state["destination"] = destination_candidate
+
+    # Origin
+    if not state.get("origin"):
+        origin_match = re.search(r"\bfrom\s+([A-Za-z .'\-]+?)(?=\s+to\b|,|$)", user_message, re.IGNORECASE)
+        if origin_match:
+            candidate = _clean_place_candidate(origin_match.group(1))
+            if candidate:
+                state["origin"] = candidate
+
     # ── Simple regex destination extraction first ─────────
     if not state.get("destination"):
-        destination_match = re.search(r"(?:trip\s+to|to|in)\s+([A-Za-z ]+?)(?:,|$)", user_message, re.IGNORECASE)
+        destination_match = re.search(
+            r"(?:trip\s+to|to|in)\s+([A-Za-z .'\-]+?)(?=,|\b(?:budget|under|around|for|with|inr|rs|rupees|people|person|persons|pax|night|nights|day|days)\b|$)",
+            user_message,
+            re.IGNORECASE,
+        )
         if destination_match:
-            candidate = destination_match.group(1).strip()
+            candidate = _clean_place_candidate(destination_match.group(1))
             if candidate:
-                state["destination"] = candidate.title()
+                state["destination"] = candidate
 
     # ── Groq fallback for destination if regex fails ───────
     if not state.get("destination"):
@@ -150,6 +202,39 @@ Example: {{"destination": "Manali"}}
         state.get("destination") and state.get("budget")
     )
     return state
+
+
+def _resolve_nearby_transit_hubs(destination: str) -> Dict[str, Optional[str]]:
+    prompt = f"""
+Find the nearest transport hubs for {destination} in India.
+Return ONLY JSON with these fields:
+{{
+  "train_station": str or null,
+  "airport": str or null,
+  "bus_terminal": str or null
+}}
+If destination has no direct train station, airport, or bus terminal, return the nearest hub names instead.
+"""
+    hubs = {"train_station": None, "airport": None, "bus_terminal": None}
+    try:
+        response = llm_call(prompt, json_mode=True)
+        extracted = json.loads(response)
+        for key in hubs:
+            value = extracted.get(key)
+            if isinstance(value, str) and value.strip():
+                hubs[key] = value.strip()
+    except Exception as e:
+        print(f"Nearby hub resolution failed: {e}")
+
+    # SerpAPI fallback for missing hub names
+    if not hubs["train_station"]:
+        hubs["train_station"] = get_nearest_hub_serpapi(destination, "railway station")
+    if not hubs["airport"]:
+        hubs["airport"] = get_nearest_hub_serpapi(destination, "airport")
+    if not hubs["bus_terminal"]:
+        hubs["bus_terminal"] = get_nearest_hub_serpapi(destination, "bus terminal")
+
+    return hubs
 
 
 # ── Node 2: Research ──────────────────────────────────────
@@ -274,6 +359,76 @@ def search_node(state: AgentState) -> AgentState:
     state["transport_by_mode"] = transport_data.get("by_mode", {})
 
     # If no direct transport options, try alternative routes
+    missing_modes = [mode for mode in ["train", "flight", "bus"]
+                     if not state["transport_by_mode"].get(mode)]
+    if missing_modes:
+        hubs = _resolve_nearby_transit_hubs(state["destination"])
+        alt_routes = []
+        if "train" in missing_modes and hubs.get("train_station"):
+            alt_routes.append({
+                "from": state.get("origin", "Delhi"),
+                "to": hubs["train_station"],
+                "mode": "train",
+                "description": (
+                    f"Nearest rail hub for {state['destination']} is {hubs['train_station']}"
+                ),
+            })
+        if "flight" in missing_modes and hubs.get("airport"):
+            alt_routes.append({
+                "from": state.get("origin", "Delhi"),
+                "to": hubs["airport"],
+                "mode": "flight",
+                "description": (
+                    f"Nearest airport for {state['destination']} is {hubs['airport']}"
+                ),
+            })
+        if "bus" in missing_modes and hubs.get("bus_terminal"):
+            alt_routes.append({
+                "from": state.get("origin", "Delhi"),
+                "to": hubs["bus_terminal"],
+                "mode": "bus",
+                "description": (
+                    f"Nearest bus hub for {state['destination']} is {hubs['bus_terminal']}"
+                ),
+            })
+
+        added_alt_modes = set()
+        for alt in alt_routes:
+            alt_transport_data = get_transport_options(
+                alt["from"],
+                alt["to"],
+                state.get("travel_month", ""),
+                state.get("transport_budget")
+            )
+            alt_options = [
+                opt for opt in alt_transport_data.get("options", [])
+                if (opt.get("type") or "").lower() == alt["mode"] and not opt.get("fallback")
+            ]
+            if not alt_options:
+                continue
+
+            for opt in alt_options:
+                opt["description"] = alt["description"]
+            state["transport_options"].extend(alt_options)
+            added_alt_modes.add(alt["mode"])
+
+            alt_by_mode = alt_transport_data.get("by_mode", {})
+            for mode, opts in alt_by_mode.items():
+                if mode != alt["mode"]:
+                    continue
+                opts = [opt for opt in opts if not opt.get("fallback")]
+                if not opts:
+                    continue
+                if mode not in state["transport_by_mode"]:
+                    state["transport_by_mode"][mode] = []
+                state["transport_by_mode"][mode].extend(opts)
+
+        if added_alt_modes:
+            state.setdefault("warnings", []).append(
+                f"Direct {', '.join(sorted(added_alt_modes))} service to {state['destination']} was scarce."
+                f" Added nearby hub options instead."
+            )
+
     if not state["transport_options"]:
         alternatives = _get_alternative_routes(state.get("origin", "Delhi"), state["destination"])
         for alt in alternatives:
@@ -286,7 +441,12 @@ def search_node(state: AgentState) -> AgentState:
                     state.get("travel_month", ""),
                     state.get("transport_budget")
                 )
-                alt_options = alt_transport_data.get("options", [])
+                target_mode = (alt.get("mode") or "").lower()
+                alt_options = [
+                    opt for opt in alt_transport_data.get("options", [])
+                    if not opt.get("fallback")
+                    and (not target_mode or (opt.get("type") or "").lower() == target_mode)
+                ]
                 # Add description to each option
                 for opt in alt_options:
                     opt["description"] = alt.get("description", f"Via {alt_origin} to {alt_dest}")
@@ -294,12 +454,33 @@ def search_node(state: AgentState) -> AgentState:
                 # Update by_mode
                 alt_by_mode = alt_transport_data.get("by_mode", {})
                 for mode, opts in alt_by_mode.items():
+                    if target_mode and mode != target_mode:
+                        continue
+                    opts = [opt for opt in opts if not opt.get("fallback")]
+                    if not opts:
+                        continue
                     if mode not in state["transport_by_mode"]:
                         state["transport_by_mode"][mode] = []
                     state["transport_by_mode"][mode].extend(opts)
 
     # Sort and group transport options
     from agent.tools import _transport_type_priority
+    deduped_transport = []
+    seen_transport = set()
+    for item in state["transport_options"]:
+        if item.get("fallback"):
+            continue
+        key = (
+            (item.get("type") or "").lower(),
+            str(item.get("code") or "").upper(),
+            str(item.get("route") or "").lower(),
+        )
+        if key in seen_transport:
+            continue
+        seen_transport.add(key)
+        deduped_transport.append(item)
+    state["transport_options"] = deduped_transport
+
     state["transport_options"].sort(
         key=lambda x: (
             _transport_type_priority(x.get("type", "")),
@@ -392,10 +573,8 @@ def replan_node(state: AgentState) -> AgentState:
 def _get_alternative_routes(origin: str, destination: str) -> List[Dict[str, Any]]:
     prompt = f"""
 Suggest alternative travel routes from {origin} to {destination} in India.
-
-If direct routes are not available, suggest nearby airports, train stations, bus stops, and intermediate stops.
-
-Return ONLY JSON array of objects, each with "from", "to", "mode" (train/flight/bus), "description".
+If direct services are scarce, prefer nearby hubs such as the nearest airport, railway station, or bus terminal for the destination.
+Return ONLY a JSON array of objects with keys: "from", "to", "mode" (train/flight/bus), "description".
 
 Example: [{{"from": "Delhi", "to": "Chandigarh", "mode": "train", "description": "Via Chandigarh"}}, {{"from": "Chandigarh", "to": "Manali", "mode": "bus", "description": "Local bus"}}]
 
@@ -409,6 +588,9 @@ Limit to 3-5 alternatives.
     except Exception as e:
         print(f"Alternative routes error: {e}")
     return []
+
+
+def _build_fallback_itinerary(state: AgentState) -> str:
     destination = state.get("destination", "your destination")
     origin = state.get("origin", "Delhi")
     nights = state.get("nights", 3)
@@ -456,13 +638,26 @@ Limit to 3-5 alternatives.
 
     return "\n".join(itinerary)
 
+
 # ── Node 6: Itinerary ─────────────────────────────────────
 def itinerary_node(state: AgentState) -> AgentState:
     if not state.get("warnings"):
         state["warnings"] = []
 
+    hotels_summary = "\n".join(
+        f"- {h.get('name', 'Unknown hotel')} at ₹{h.get('price', 'N/A')}/night ({h.get('location', '')})"
+        for h in state.get("hotels", [])[:5]
+    ) or "- No hotel pricing available yet."
+
+    transport_summary = "\n".join(
+        f"- {opt.get('route')} ({opt.get('type')}) — fare ₹{opt.get('fare') or 'N/A'}, {opt.get('duration')}"
+        + (f" ({opt.get('description')})" if opt.get('description') else "")
+        for opt in state.get("transport_options", [])[:5]
+    ) or "- No transport options found."
+
     prompt = f"""
-Build a complete day-by-day travel itinerary.
+Compose a clean Markdown travel itinerary.
+Use headings and bullet lists only; do not include JSON, code fences, or extra text markers.
 
 Trip:
 - Destination : {state['destination']}
@@ -481,12 +676,15 @@ Budget:
 - Activities  : ₹{state['activities_budget']}
 - Reasoning   : {state['budget_reasoning']}
 
-Hotels found      : {state['hotels']}
-Transport found   : {state['transport_options']}
+Hotels:
+{hotels_summary}
 
-Write day-by-day itinerary in Markdown.
-Include timings, meals, places, safety warnings, what to carry.
-Never plan outdoor activities after sunset time in weather data.
+Transport options:
+{transport_summary}
+
+Write a day-by-day itinerary in Markdown.
+Include timings, meals, places to visit, safety notes, and packing advice.
+Do not plan outdoor activities after sunset time.
 """
     try:
         result = llm_call(prompt)

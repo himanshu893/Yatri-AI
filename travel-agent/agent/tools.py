@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY") or os.getenv("TAVILY_API") or os.getenv("TAILVY_API")
+SERPAPI_KEY = os.getenv("SERPAPI_KEY") or os.getenv("SERPAPI") or os.getenv("SERPAPI_KEY")
 if not TAVILY_API_KEY:
     print("⚠️  Missing Tavily API key. Set TAVILY_API_KEY, TAVILY_API, or TAILVY_API in your environment.")
     tavily = None
@@ -239,6 +240,118 @@ def get_hotel_prices_tavily(destination: str, month: str) -> str:
     return tavily_search(query)
 
 
+def _serpapi_search(params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not SERPAPI_KEY:
+        return None
+
+    params = {**params, "api_key": SERPAPI_KEY}
+    try:
+        response = requests.get("https://serpapi.com/search", params=params, timeout=20)
+        data = response.json()
+        if data.get("error"):
+            print(f"⚠️  SerpAPI error: {data['error']}")
+            return None
+        return data
+    except Exception as e:
+        print(f"⚠️  SerpAPI query failed: {e}")
+        return None
+
+
+def get_nearest_hub_serpapi(destination: str, hub_type: str) -> Optional[str]:
+    """Use SerpAPI to infer the nearest airport, railway station, or bus terminal."""
+    query = f"nearest {hub_type} to {destination} India"
+    data = _serpapi_search({
+        "engine": "google",
+        "q": query,
+        "gl": "in",
+        "hl": "en",
+    })
+    if not data:
+        return None
+
+    results = data.get("organic_results") or []
+    if not results:
+        return None
+
+    top = results[0]
+    candidate = top.get("title") or top.get("snippet") or ""
+    cleaned = _clean_nearest_hub_text(candidate)
+    if cleaned:
+        return cleaned
+    return None
+
+
+def _clean_nearest_hub_text(text: str) -> str:
+    text = re.sub(r"\s*[|–—-].*$", "", text)
+    text = re.sub(r"\s*\(.*?\)$", "", text)
+    return text.strip()
+
+
+def _resolve_nearby_transit_hubs(destination: str) -> Dict[str, Optional[str]]:
+    """Resolve nearest transit hubs for the destination using SerpAPI."""
+    hubs = {"train_station": None, "airport": None, "bus_terminal": None}
+
+    hubs["train_station"] = get_nearest_hub_serpapi(destination, "railway station")
+    hubs["airport"] = get_nearest_hub_serpapi(destination, "airport")
+    hubs["bus_terminal"] = get_nearest_hub_serpapi(destination, "bus terminal")
+
+    return hubs
+
+
+def _estimate_route_fare(route: str, transport_type: str) -> int:
+    route_lower = route.lower()
+    if transport_type == "flight":
+        base = 4200
+        if "delhi" in route_lower or "mumbai" in route_lower:
+            base += 1200
+        if "chandigarh" in route_lower or "kullu" in route_lower or "manali" in route_lower:
+            base += 400
+    elif transport_type == "train":
+        base = 1400
+        if "delhi" in route_lower or "mumbai" in route_lower:
+            base += 800
+        if "chandigarh" in route_lower:
+            base += 200
+    elif transport_type == "bus":
+        base = 1000
+        if "delhi" in route_lower or "mumbai" in route_lower:
+            base += 400
+        if "chandigarh" in route_lower or "manali" in route_lower:
+            base += 100
+    else:
+        base = 1800
+    return base
+
+
+def _ensure_transport_option_fare(option: Dict[str, Any]) -> Dict[str, Any]:
+    if option.get("fare") is None:
+        if (option.get("type") or "").lower() == "train":
+            if not option.get("classes"):
+                option["classes"] = [{
+                    "classType": "Check availability",
+                    "fare": "N/A",
+                    "status": "Check railway portal",
+                }]
+            return option
+        option["fare"] = _estimate_route_fare(option.get("route", ""), option.get("type", ""))
+
+    classes = option.get("classes") or []
+    if classes and not any(_extract_fare_to_int(c.get("fare", "")) for c in classes):
+        est_fare = option["fare"]
+        for c in classes:
+            c["fare"] = f"₹{est_fare}"
+            c["status"] = c.get("status") or "Estimated"
+        option["classes"] = classes
+    elif not classes:
+        option["classes"] = [{
+            "classType": "Economy",
+            "fare": f"₹{option['fare']}",
+            "status": "Estimated"
+        }]
+
+    return option
+
+
 # ── Tool 3: Transport ─────────────────────────────────────
 def _extract_fare_to_int(value: str) -> Optional[int]:
     if not value:
@@ -281,6 +394,58 @@ def _build_transport_option(
         "classes": classes,
         "fare": _best_fare_from_classes(classes),
     }
+
+
+_PLACE_ALIASES = {
+    "mumabi": "Mumbai",
+    "bombay": "Mumbai",
+    "csmt": "Mumbai",
+    "cstm": "Mumbai",
+    "mumbai csmt": "Mumbai",
+    "mumbai cstm": "Mumbai",
+    "lokmanya tilak terminus": "Mumbai",
+    "ltt": "Mumbai",
+    "nagpur junction railway station": "Nagpur",
+    "nagpur junction": "Nagpur",
+    "ngp": "Nagpur",
+    "new delhi": "Delhi",
+    "ndls": "Delhi",
+    "nzm": "Delhi",
+}
+
+
+def _canonical_place_name(value: str) -> str:
+    cleaned = re.sub(r"\s+", " ", str(value or "")).strip(" ,.")
+    cleaned = re.sub(
+        r"\b(?:railway station|train station|junction|jn|station)\b",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.")
+    if not cleaned:
+        return ""
+    return _PLACE_ALIASES.get(cleaned.lower(), cleaned.title())
+
+
+def _real_options(options: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [option for option in options if not option.get("fallback")]
+
+
+def _dedupe_transport_options(options: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    deduped: List[Dict[str, Any]] = []
+    seen = set()
+    for option in options:
+        key = (
+            (option.get("type") or "").lower(),
+            str(option.get("code") or "").upper(),
+            str(option.get("route") or "").lower(),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(option)
+    return deduped
 
 
 def _parse_transport_options_from_text(raw_text: str) -> List[Dict[str, Any]]:
@@ -433,16 +598,29 @@ def _normalize_train_scraper_output(raw: Optional[Dict[str, Any]], origin: str, 
     for t in trains:
         classes = t.get("availability", []) or []
         duration = t.get("dur") or "N/A"
-        normalized.append(
-            _build_transport_option(
-                "train",
-                t.get("trainName", f"{origin} to {destination}"),
-                f"{origin} to {destination}",
-                t.get("trainNumber", "N/A"),
-                duration,
-                classes,
-            )
+        transport = _build_transport_option(
+            "train",
+            t.get("trainName", f"{origin} to {destination}"),
+            f"{origin} to {destination}",
+            t.get("trainNumber", "N/A"),
+            duration,
+            classes,
         )
+        if t.get("fromStation") and t.get("toStation"):
+            transport["description"] = f"Stations: {t.get('fromStation')} to {t.get('toStation')}"
+        if t.get("runningDays"):
+            existing_description = transport.get("description")
+            running_days = f"Runs: {t.get('runningDays')}"
+            transport["description"] = (
+                f"{existing_description} | {running_days}"
+                if existing_description
+                else running_days
+            )
+        if t.get("dep"):
+            transport["departure"] = t.get("dep")
+        if t.get("arr"):
+            transport["arrival"] = t.get("arr")
+        normalized.append(transport)
     return normalized
 
 
@@ -450,18 +628,22 @@ def _normalize_mode_scraper_output(raw: Optional[Dict[str, Any]], mode: str) -> 
     if not raw:
         return []
     options = raw.get("options", [])
+    top_level_fallback = bool(raw.get("fallback"))
     normalized: List[Dict[str, Any]] = []
     for opt in options:
-        normalized.append(
-            _build_transport_option(
-                mode,
-                opt.get("name") or opt.get("route", "Unknown route"),
-                opt.get("route", "Unknown route"),
-                opt.get("code", "N/A"),
-                opt.get("duration", "N/A"),
-                opt.get("classes", []) or [],
-            )
+        transport = _build_transport_option(
+            mode,
+            opt.get("name") or opt.get("route", "Unknown route"),
+            opt.get("route", "Unknown route"),
+            opt.get("code", "N/A"),
+            opt.get("duration", "N/A"),
+            opt.get("classes", []) or [],
         )
+        if top_level_fallback or opt.get("fallback"):
+            transport["fallback"] = True
+        if opt.get("description"):
+            transport["description"] = opt.get("description")
+        normalized.append(transport)
     return normalized
 
 
@@ -476,15 +658,49 @@ def get_transport_options(
     Priority: local JS scrapers -> Tavily parse -> fallback samples.
     """
     parsed: List[Dict[str, Any]] = []
+    origin = _canonical_place_name(origin) or origin
+    destination = _canonical_place_name(destination) or destination
 
     # 1) Local scrapers (authoritative for this project)
     train_raw = _run_node_scraper("trainScraper.js", origin, destination)
     flight_raw = _run_node_scraper("flightScraper.js", origin, destination)
     bus_raw = _run_node_scraper("busScraper.js", origin, destination)
 
+    hubs = _resolve_nearby_transit_hubs(destination)
+
     parsed.extend(_normalize_train_scraper_output(train_raw, origin, destination))
-    parsed.extend(_normalize_mode_scraper_output(flight_raw, "flight"))
-    parsed.extend(_normalize_mode_scraper_output(bus_raw, "bus"))
+    parsed.extend(_real_options(_normalize_mode_scraper_output(flight_raw, "flight")))
+    parsed.extend(_real_options(_normalize_mode_scraper_output(bus_raw, "bus")))
+
+    # If direct mode results are missing, attempt hub-based alternatives
+    if not any(item["type"] == "train" and not item.get("fallback") for item in parsed) and hubs.get("train_station"):
+        train_hub = _canonical_place_name(hubs["train_station"]) or hubs["train_station"]
+        train_hub_raw = _run_node_scraper("trainScraper.js", origin, train_hub)
+        hub_options = _normalize_train_scraper_output(train_hub_raw, origin, train_hub)
+        for opt in hub_options:
+            opt["description"] = f"Nearest rail hub for {destination}: {train_hub}"
+        parsed.extend(hub_options)
+
+    if not any(item["type"] == "flight" and not item.get("fallback") for item in parsed) and hubs.get("airport"):
+        airport_hub = _canonical_place_name(hubs["airport"]) or hubs["airport"]
+        flight_hub_raw = _run_node_scraper("flightScraper.js", origin, airport_hub)
+        hub_options = _real_options(_normalize_mode_scraper_output(flight_hub_raw, "flight"))
+        for opt in hub_options:
+            opt["description"] = f"Nearest airport for {destination}: {airport_hub}"
+        parsed.extend(hub_options)
+
+    if not any(item["type"] == "bus" and not item.get("fallback") for item in parsed) and hubs.get("bus_terminal"):
+        bus_hub = _canonical_place_name(hubs["bus_terminal"]) or hubs["bus_terminal"]
+        bus_hub_raw = _run_node_scraper("busScraper.js", origin, bus_hub)
+        hub_options = _real_options(_normalize_mode_scraper_output(bus_hub_raw, "bus"))
+        for opt in hub_options:
+            opt["description"] = f"Nearest bus terminal for {destination}: {bus_hub}"
+        parsed.extend(hub_options)
+
+    parsed = _dedupe_transport_options(_real_options(parsed))
+
+    # Fill any missing fare values with conservative estimates
+    parsed = [_ensure_transport_option_fare(option) for option in parsed]
 
     # No Tavily or hardcoded fallback transport options.
     # Use only results returned by the local JS scrapers.
@@ -509,8 +725,9 @@ def get_transport_options(
     return {
         "options": parsed,
         "by_mode": by_mode,
-        "source": "local-scraper+tavily+fallback",
+        "source": "local-scraper",
         "query": query,
+        "hubs": hubs,
     }
 
 
