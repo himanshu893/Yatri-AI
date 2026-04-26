@@ -48,6 +48,10 @@ initial_state = {
 
     # Output
     "itinerary":        None,
+    "itinerary_place_queries": [],
+    "map_waypoints": [],
+    "hotel_map_pins": [],
+    "route_map_url": None,
     "warnings":         [],
     "budget_breakdown": None,
 

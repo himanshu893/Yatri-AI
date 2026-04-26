@@ -57,6 +57,10 @@ class AgentState(TypedDict):
 
     # ── Final output ───────────────────────
     itinerary: Optional[str]
+    itinerary_place_queries: Optional[List[str]]
+    map_waypoints: Optional[List[Dict[str, Any]]]
+    hotel_map_pins: Optional[List[Dict[str, Any]]]
+    route_map_url: Optional[str]
     warnings: List[str]
     budget_breakdown: Optional[Dict]   # add — clean summary for Streamlit UI
 

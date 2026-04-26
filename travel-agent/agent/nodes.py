@@ -12,6 +12,9 @@ from agent.tools import (
     get_hotel_prices_tavily,
     get_current_situation,
     get_transport_options,
+    get_top_place_pins_serpapi,
+    get_place_pins_serpapi,
+    get_hotel_pins_serpapi,
     get_nearest_hub_serpapi,
     _resolve_nearby_transit_hubs,
     _build_taxi_transfer_option,
@@ -392,12 +395,47 @@ def search_node(state: AgentState) -> AgentState:
         latitude=state.get("destination_latitude"),
         longitude=state.get("destination_longitude"),
     )
+    if not serpapi_hotels and hotel_budget:
+        state.setdefault("warnings", []).append(
+            "No hotels matched the allocated hotel budget, so the planner retried without a price cap."
+        )
+        serpapi_hotels = get_hotel_prices_serpapi(
+            state["destination"],
+            state.get("travel_month", ""),
+            nights=nights,
+            adults=num_people,
+            latitude=state.get("destination_latitude"),
+            longitude=state.get("destination_longitude"),
+        )
     state["hotels"] = serpapi_hotels if serpapi_hotels else []
     if not state["hotels"]:
         state.setdefault("warnings", []).append(
             "No hotels returned from SerpAPI. The key may be rate-limited/quota-limited, "
             "or Google Hotels returned no properties for the selected destination/date."
         )
+        fallback_hotels = _build_estimated_hotels(state)
+        if fallback_hotels:
+            state["hotels"] = fallback_hotels
+            state.setdefault("warnings", []).append(
+                "Showing Groq-generated hotel suggestions because live SerpAPI hotel rows were unavailable."
+            )
+    else:
+        state["hotel_map_pins"] = get_hotel_pins_serpapi(
+            state["hotels"],
+            state["destination"],
+            limit=6,
+        )
+
+    if state["hotels"] and not state.get("hotel_map_pins"):
+        state["hotel_map_pins"] = get_hotel_pins_serpapi(
+            state["hotels"],
+            state["destination"],
+            limit=6,
+        )
+
+    state["map_waypoints"] = get_top_place_pins_serpapi(state["destination"], limit=6)
+    if state["map_waypoints"]:
+        state["itinerary_place_queries"] = [pin.get("name") for pin in state["map_waypoints"]]
 
     # ── Transport — structured mode-wise aggregation
     transport_data = get_transport_options(
@@ -662,6 +700,154 @@ Limit to 3-5 alternatives.
     return []
 
 
+def _parse_json_object_or_array(raw: str) -> Any:
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+    return json.loads(text)
+
+
+def _build_estimated_hotels(state: AgentState, limit: int = 6) -> List[Dict[str, Any]]:
+    prompt = f"""
+SerpAPI did not return hotel rows. Create a practical fallback list of hotels/stays for frontend display.
+
+Destination: {state['destination']}
+Month: {state.get('travel_month', 'not specified')}
+Nights: {state.get('nights', 3)}
+People: {state.get('num_people', 1)}
+Hotel budget: ₹{state.get('hotel_budget') or 'not specified'}
+Hotel price research text: {state.get('hotel_price_trend')}
+
+Return ONLY JSON:
+{{
+  "hotels": [
+    {{
+      "name": "hotel or stay name",
+      "price": 3500,
+      "rating": 4.2,
+      "location": "short area/why it fits",
+      "amenities": ["Wi-Fi", "Breakfast"],
+      "estimated": true,
+      "source": "Groq fallback"
+    }}
+  ]
+}}
+Use plausible well-known stays or areas for the destination. Keep prices as INR per night numbers.
+"""
+    try:
+        data = _parse_json_object_or_array(llm_call(prompt, json_mode=True))
+        rows = data.get("hotels", data) if isinstance(data, dict) else data
+        hotels = []
+        for row in rows or []:
+            if not isinstance(row, dict) or not row.get("name"):
+                continue
+            price = row.get("price")
+            try:
+                price = int(str(price).replace(",", "").strip()) if price is not None else None
+            except ValueError:
+                price = None
+            hotels.append({
+                "name": str(row.get("name")).strip(),
+                "price": price,
+                "rating": row.get("rating"),
+                "hotel_class": row.get("hotel_class"),
+                "location": row.get("location") or state["destination"],
+                "reviews": row.get("reviews"),
+                "amenities": row.get("amenities", [])[:5] if isinstance(row.get("amenities"), list) else [],
+                "estimated": True,
+                "source": row.get("source") or "Groq fallback",
+            })
+            if len(hotels) >= limit:
+                break
+        return hotels
+    except Exception as e:
+        print(f"Hotel fallback generation failed: {e}")
+        return []
+
+
+def _extract_place_queries_with_llm(itinerary: str, destination: str, limit: int = 8) -> List[str]:
+    prompt = f"""
+Extract the actual tourist places, attractions, viewpoints, museums, temples, gardens, markets, neighborhoods, or activity stops from this itinerary.
+Do NOT include transport hubs, hotels, meals, generic words, airports, railway stations, restaurants, packing, check-in, or rest.
+Destination context: {destination}
+
+Itinerary:
+{itinerary}
+
+Return ONLY JSON:
+{{"places": ["Place name 1", "Place name 2"]}}
+Limit to {limit} useful places.
+"""
+    try:
+        data = _parse_json_object_or_array(llm_call(prompt, json_mode=True))
+        rows = data.get("places", data) if isinstance(data, dict) else data
+        places = []
+        seen = set()
+        for value in rows or []:
+            name = str(value or "").strip(" .,-:")
+            key = name.lower()
+            if not name or key in seen:
+                continue
+            seen.add(key)
+            places.append(name)
+            if len(places) >= limit:
+                break
+        return places
+    except Exception as e:
+        print(f"LLM place extraction failed: {e}")
+        return []
+
+
+def _extract_place_queries_from_itinerary(itinerary: str, destination: str, limit: int = 8) -> List[str]:
+    stop_words = {
+        "arrival",
+        "breakfast",
+        "lunch",
+        "dinner",
+        "hotel",
+        "airport",
+        "station",
+        "restaurant",
+        "local restaurant",
+        "local cafe",
+        "local café",
+        "packing",
+        "check-in",
+        "check in",
+        "freshen up",
+    }
+    queries: List[str] = []
+    seen = set()
+    patterns = [
+        r"\b(?:visit|explore|stroll at|stroll around|walk at|walk around|head to|go to|see)\s+(?:the\s+)?([A-Z][A-Za-z0-9&' .-]{2,80})",
+        r"\b(?:at|around|near)\s+(?:the\s+)?([A-Z][A-Za-z0-9&' .-]{2,80})",
+    ]
+
+    for line in (itinerary or "").splitlines():
+        cleaned = re.sub(r"[*_`#>-]", " ", line)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if not cleaned:
+            continue
+        for pattern in patterns:
+            for match in re.finditer(pattern, cleaned):
+                name = match.group(1).strip(" .,-:")
+                name = re.split(r"\s+(?:and|for|before|after|then|followed by)\s+", name)[0].strip(" .,-:")
+                if not name or len(name) < 3:
+                    continue
+                key = name.lower()
+                if key in stop_words or key in seen:
+                    continue
+                seen.add(key)
+                queries.append(name)
+                if len(queries) >= limit:
+                    return queries
+
+    if not queries and destination:
+        queries.append(destination)
+    return queries[:limit]
+
+
 def _build_fallback_itinerary(state: AgentState) -> str:
     destination = state.get("destination", "your destination")
     origin = state.get("origin", "Delhi")
@@ -770,6 +956,23 @@ Do not plan outdoor activities after sunset time.
             "Groq itinerary generation failed. Check GROQ_API in travel-agent/.env "
             "and restart the travel-agent API."
         ) from e
+
+    itinerary_place_queries = _extract_place_queries_with_llm(
+        state.get("itinerary") or "",
+        state["destination"],
+    ) or _extract_place_queries_from_itinerary(
+        state.get("itinerary") or "",
+        state["destination"],
+    )
+    if itinerary_place_queries:
+        state["itinerary_place_queries"] = itinerary_place_queries
+        itinerary_pins = get_place_pins_serpapi(
+            itinerary_place_queries,
+            state["destination"],
+            limit=8,
+        )
+        if itinerary_pins:
+            state["map_waypoints"] = itinerary_pins
 
     state["budget_breakdown"] = {
         "Hotel"      : state["hotel_budget"],

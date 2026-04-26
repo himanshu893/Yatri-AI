@@ -47,6 +47,7 @@ export function TripResultPage() {
 
   const routePins = data?.map_waypoints ?? [];
   const hotelPins = data?.hotel_map_pins ?? [];
+  const itineraryPlaceQueries = data?.itinerary_place_queries ?? [];
 
   if (!trip || !data) {
     return <Navigate to="/trips" replace />;
@@ -274,9 +275,30 @@ export function TripResultPage() {
                     Itinerary stops (SerpAPI)
                   </h3>
                   <ol className="list-none space-y-4">
-                    {routePins.length === 0 && (
-                      <li className="text-muted">No pins stored.</li>
-                    )}
+                    {routePins.length === 0 &&
+                      itineraryPlaceQueries.length === 0 && (
+                        <li className="text-muted">No places in this response.</li>
+                      )}
+                    {routePins.length === 0 &&
+                      itineraryPlaceQueries.map((name, i) => (
+                        <motion.li
+                          key={`${name}-${i}`}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                          className="flex gap-4 rounded-xl bg-surface-low p-4"
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
+                            {i + 1}
+                          </span>
+                          <div>
+                            <span className="font-semibold text-ink">{name}</span>
+                            <span className="mt-1 block text-sm text-muted">
+                              Listed from the generated itinerary
+                            </span>
+                          </div>
+                        </motion.li>
+                      ))}
                     {routePins.map((w, i) => (
                       <motion.li
                         key={`${w.order}-${w.lat}`}

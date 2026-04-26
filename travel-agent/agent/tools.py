@@ -256,6 +256,109 @@ def get_hotel_prices_tavily(destination: str, month: str) -> str:
     return tavily_search(query)
 
 
+def _waypoint_from_maps_item(
+    item: Dict[str, Any],
+    order: int,
+    query: str,
+) -> Optional[Dict[str, Any]]:
+    gps = item.get("gps_coordinates") or {}
+    lat = gps.get("latitude")
+    lng = gps.get("longitude")
+    if lat is None or lng is None:
+        return None
+
+    return {
+        "order": order,
+        "query": query,
+        "name": item.get("title") or item.get("name") or query,
+        "lat": lat,
+        "lng": lng,
+        "address": item.get("address"),
+    }
+
+
+def get_top_place_pins_serpapi(destination: str, limit: int = 6) -> List[Dict[str, Any]]:
+    """Return tourist attraction map pins for the destination from SerpAPI Google Maps."""
+    data = _serpapi_search({
+        "engine": "google_maps",
+        "q": f"top tourist attractions in {destination} India",
+        "type": "search",
+        "gl": "in",
+        "hl": "en",
+    })
+    if not data:
+        return []
+
+    pins: List[Dict[str, Any]] = []
+    seen = set()
+    for item in data.get("local_results") or []:
+        waypoint = _waypoint_from_maps_item(
+            item,
+            len(pins) + 1,
+            item.get("title") or f"{destination} attraction",
+        )
+        if not waypoint:
+            continue
+        key = str(waypoint["name"]).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        pins.append(waypoint)
+        if len(pins) >= limit:
+            break
+    return pins
+
+
+def get_place_pins_serpapi(
+    queries: List[str],
+    destination: str,
+    limit: int = 8,
+) -> List[Dict[str, Any]]:
+    """Geocode named itinerary stops with SerpAPI Google Maps."""
+    pins: List[Dict[str, Any]] = []
+    seen = set()
+    for query in queries:
+        clean_query = str(query or "").strip()
+        if not clean_query:
+            continue
+        data = _serpapi_search({
+            "engine": "google_maps",
+            "q": f"{clean_query} {destination} India",
+            "type": "search",
+            "gl": "in",
+            "hl": "en",
+        })
+        if not data:
+            continue
+        candidates = []
+        if data.get("place_results"):
+            candidates.append(data["place_results"])
+        candidates.extend(data.get("local_results") or [])
+        for item in candidates:
+            waypoint = _waypoint_from_maps_item(item, len(pins) + 1, clean_query)
+            if not waypoint:
+                continue
+            key = str(waypoint["name"]).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            pins.append(waypoint)
+            break
+        if len(pins) >= limit:
+            break
+    return pins
+
+
+def get_hotel_pins_serpapi(
+    hotels: List[Dict[str, Any]],
+    destination: str,
+    limit: int = 6,
+) -> List[Dict[str, Any]]:
+    """Geocode hotel names with SerpAPI Google Maps."""
+    queries = [str(h.get("name") or "").strip() for h in hotels if h.get("name")]
+    return get_place_pins_serpapi(queries, destination, limit=limit)
+
+
 def _serpapi_search(params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not SERPAPI_KEY:
         return None
